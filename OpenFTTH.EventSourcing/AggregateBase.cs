@@ -6,7 +6,7 @@ namespace OpenFTTH.EventSourcing
     public abstract class AggregateBase
     {
         // For indexing our event streams
-        public Guid Id { get; protected set; }
+        public Guid Id { get; internal protected set; }
 
         // For protecting the state, i.e. conflict prevention
         public int Version { get; protected set; }

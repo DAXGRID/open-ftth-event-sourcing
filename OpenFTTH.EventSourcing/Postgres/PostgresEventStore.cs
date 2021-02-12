@@ -31,6 +31,10 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        public IProjectionRepository Projections => throw new NotImplementedException();
+
+        public IAggregateRepository AggregateRepository => throw new NotImplementedException();
+
         public T Load<T>(Guid id, int? version = null) where T : AggregateBase
         {
             IReadOnlyList<IEvent> events;
@@ -62,6 +66,16 @@ namespace OpenFTTH.EventSourcing.Postgres
                 return false;
             else
                 return true;
+        }
+
+        public void AppendStream(Guid streamId, long expectedVersion, object[] events)
+        {
+            throw new NotImplementedException();
+        }
+
+        public object[] FetchStream(Guid streamId, long version = 0)
+        {
+            throw new NotImplementedException();
         }
     }
 }
