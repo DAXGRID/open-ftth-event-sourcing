@@ -39,8 +39,11 @@ namespace OpenFTTH.EventSourcing
                 _ = events.Aggregate(instance, (o, @event) => ApplyEvent.Invoke(instance, new[] { @event }));
                 return (T)instance;
             }
-
-            throw new InvalidOperationException($"No aggregate by id {id}.");
+            else
+            {
+                // We create a new aggregate instance if no aggregate exists in database
+                return (T)Activator.CreateInstance(typeof(T), true);
+            }
         }
 
         public bool CheckIfAggregateIdHasBeenUsed(Guid id)

@@ -33,7 +33,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public IProjectionRepository Projections => throw new NotImplementedException();
 
-        public IAggregateRepository AggregateRepository => throw new NotImplementedException();
+        public IAggregateRepository Aggregates => throw new NotImplementedException();
 
         public T Load<T>(Guid id, int? version = null) where T : AggregateBase
         {

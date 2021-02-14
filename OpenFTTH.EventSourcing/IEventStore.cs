@@ -11,6 +11,6 @@ namespace OpenFTTH.EventSourcing
         void AppendStream(Guid streamId, long expectedVersion, object[] events);
         object[] FetchStream(Guid streamId, long version = 0);
         IProjectionRepository Projections { get; }
-        IAggregateRepository AggregateRepository { get; }
+        IAggregateRepository Aggregates { get; }
     }
 }

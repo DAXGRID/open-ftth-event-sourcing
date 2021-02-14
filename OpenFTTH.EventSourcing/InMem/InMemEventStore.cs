@@ -15,7 +15,7 @@ namespace OpenFTTH.EventSourcing.InMem
         public IProjectionRepository Projections => _projectionRepository;
 
         private AggregateRepository _aggregateRepository;
-        public IAggregateRepository AggregateRepository => _aggregateRepository;
+        public IAggregateRepository Aggregates => _aggregateRepository;
 
         public InMemEventStore()
         {

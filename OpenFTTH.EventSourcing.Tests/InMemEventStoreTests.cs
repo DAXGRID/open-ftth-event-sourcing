@@ -30,9 +30,9 @@ namespace OpenFTTH.EventSourcing.Tests
             aggregateBeforeHydration.Bark(100);
             aggregateBeforeHydration.Poop(1500);
 
-            eventStore.AggregateRepository.Store(aggregateBeforeHydration);
+            eventStore.Aggregates.Store(aggregateBeforeHydration);
 
-            var dehydratedAggregate = eventStore.AggregateRepository.Load<DogAggregate>(aggregateBeforeHydration.Id);
+            var dehydratedAggregate = eventStore.Aggregates.Load<DogAggregate>(aggregateBeforeHydration.Id);
 
             dehydratedAggregate.Should().BeEquivalentTo(aggregateBeforeHydration);
         }
@@ -51,16 +51,28 @@ namespace OpenFTTH.EventSourcing.Tests
             snoopy.Poop(200);
             snoopy.Poop(700);
             snoopy.Poop(50);
-            eventStore.AggregateRepository.Store(snoopy);
+            eventStore.Aggregates.Store(snoopy);
 
             var pluto = new DogAggregate(Guid.NewGuid(), "Pluto");
             pluto.Poop(2000);
             pluto.Poop(100);
-            eventStore.AggregateRepository.Store(pluto);
+            eventStore.Aggregates.Store(pluto);
 
             poopProjection.PoopReport.Count.Should().Be(2);
             poopProjection.PoopReport.Find(p => p.DogName == "Snoopy").PoopTotal.Should().Be(950);
             poopProjection.PoopReport.Find(p => p.DogName == "Pluto").PoopTotal.Should().Be(2100);
+        }
+
+        [Fact]
+        public void TestLoadAggregateThatDontExitInEventStore_ShouldReturnNewBlankInstance()
+        {
+            var eventStore = new InMemEventStore() as IEventStore;
+
+            Guid newDogId = Guid.NewGuid();
+  
+            var newDog = eventStore.Aggregates.Load<DogAggregate>(newDogId);
+
+            newDog.Version.Should().Be(0);
         }
     }
 }
