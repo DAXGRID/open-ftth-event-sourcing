@@ -37,5 +37,21 @@ namespace OpenFTTH.EventSourcing.Tests
             poopProjection.PoopReport.Count.Should().Be(1);
             poopProjection.PoopReport[0].DogName.Should().Be("Snoopy");
         }
+
+        [Fact]
+        public void TestProjectionLookupThroughIEventStore()
+        {
+            // Setup
+            var poopProjection = _eventStore.Projections.Get<PoopProjection>();
+
+            // Act
+            var snoopy = new DogAggregate(Guid.NewGuid(), "Snoopy");
+            snoopy.Poop(200);
+            _eventStore.Aggregates.Store(snoopy);
+
+            // Assert
+            poopProjection.PoopReport.Count.Should().Be(1);
+            poopProjection.PoopReport[0].DogName.Should().Be("Snoopy");
+        }
     }
 }

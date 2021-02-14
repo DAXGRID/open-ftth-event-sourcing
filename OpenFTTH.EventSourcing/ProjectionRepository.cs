@@ -50,5 +50,18 @@ namespace OpenFTTH.EventSourcing
                 _serviceProviderHasBeenScanned = true;
             }
         }
+
+        public T Get<T>()
+        {
+            ScanServiceProviderForProjections();
+
+            foreach (var projection in _projections)
+            {
+                if (projection is T)
+                    return (T)projection;
+            }
+
+            throw new ArgumentException($"Cant find projection of type: {typeof(T).Name}");
+        }
     }
 }
