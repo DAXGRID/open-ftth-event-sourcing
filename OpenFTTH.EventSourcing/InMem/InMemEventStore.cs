@@ -2,24 +2,24 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing.InMem
 {
     public class InMemEventStore : IEventStore
     {
         private readonly ConcurrentDictionary<Guid, List<IEventEnvelope>> _events = new ConcurrentDictionary<Guid, List<IEventEnvelope>>();
-        
-        private ProjectionRepository _projectionRepository = new ProjectionRepository();
+
+        private ProjectionRepository _projectionRepository;
         public IProjectionRepository Projections => _projectionRepository;
 
         private AggregateRepository _aggregateRepository;
         public IAggregateRepository Aggregates => _aggregateRepository;
 
-        public InMemEventStore()
+        public InMemEventStore(IServiceProvider serviceProvider)
         {
             _aggregateRepository = new AggregateRepository(this);
+
+            _projectionRepository = new ProjectionRepository(serviceProvider);
         }
 
         public void AppendStream(Guid streamId, long expectedVersion, object[] events)

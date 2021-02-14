@@ -11,7 +11,7 @@ namespace OpenFTTH.EventSourcing.Tests
         [Fact]
         public void TestRawEventAppendingAndFetching()
         {
-            var eventStore = new InMemEventStore() as IEventStore;
+            var eventStore = new InMemEventStore(null) as IEventStore;
 
             var streamId = Guid.NewGuid();
             var eventsToSave = new object[] { new DogBorn("Snoopy"), new DogBorn("Pluto") };
@@ -24,7 +24,7 @@ namespace OpenFTTH.EventSourcing.Tests
         [Fact]
         public void TestAggregateHydrationAndDehydration()
         {
-            var eventStore = new InMemEventStore() as IEventStore;
+            var eventStore = new InMemEventStore(null) as IEventStore;
 
             var aggregateBeforeHydration = new DogAggregate(Guid.NewGuid(), "Snoopy");
             aggregateBeforeHydration.Bark(100);
@@ -41,7 +41,7 @@ namespace OpenFTTH.EventSourcing.Tests
         [Fact]
         public void TestProjection()
         {
-            var eventStore = new InMemEventStore() as IEventStore;
+            var eventStore = new InMemEventStore(null) as IEventStore;
 
             var poopProjection = new PoopProjection();
 
@@ -66,7 +66,7 @@ namespace OpenFTTH.EventSourcing.Tests
         [Fact]
         public void TestLoadAggregateThatDontExitInEventStore_ShouldReturnNewBlankInstance()
         {
-            var eventStore = new InMemEventStore() as IEventStore;
+            var eventStore = new InMemEventStore(null) as IEventStore;
 
             Guid newDogId = Guid.NewGuid();
   
