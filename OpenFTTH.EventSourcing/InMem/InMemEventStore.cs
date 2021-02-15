@@ -41,14 +41,14 @@ namespace OpenFTTH.EventSourcing.InMem
 
         private void AddEventsToStore(Guid streamId, List<IEventEnvelope> events)
         {
-            if (!_events.ContainsKey(streamId))
-            {
-                _events[streamId] = new List<IEventEnvelope>(events);
-            }
-            else
-            {
-                _events[streamId].AddRange(events);
-            }
+            _events.AddOrUpdate(streamId, events, (streamId, existingStreamEvents) => 
+                {
+                    var newEventList = new List<IEventEnvelope>();
+                    newEventList.AddRange(existingStreamEvents);
+                    newEventList.AddRange(events);
+                    return newEventList;
+                }
+            );
         }
 
         public object[] FetchStream(Guid streamId, long version = 0)

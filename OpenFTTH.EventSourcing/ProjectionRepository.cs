@@ -41,10 +41,13 @@ namespace OpenFTTH.EventSourcing
             {
                 var projections = _serviceProvider.GetServices<IProjection>();
 
-                foreach (var projection in projections)
+                if (projections != null)
                 {
-                    if (!_projections.Exists(existingProjection => existingProjection.GetType() == projection.GetType()))
-                        _projections.Add(projection);
+                    foreach (var projection in projections)
+                    {
+                        if (!_projections.Exists(existingProjection => existingProjection.GetType() == projection.GetType()))
+                            _projections.Add(projection);
+                    }
                 }
 
                 _serviceProviderHasBeenScanned = true;
