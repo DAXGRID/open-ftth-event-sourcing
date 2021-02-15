@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -13,7 +14,7 @@ namespace OpenFTTH.EventSourcing
 
         private bool _serviceProviderHasBeenScanned = false;
 
-        private readonly List<IProjection> _projections = new List<IProjection>();
+        private readonly ConcurrentBag<IProjection> _projections = new ConcurrentBag<IProjection>();
 
         public ProjectionRepository(IServiceProvider serviceProvider)
         {
@@ -45,7 +46,7 @@ namespace OpenFTTH.EventSourcing
                 {
                     foreach (var projection in projections)
                     {
-                        if (!_projections.Exists(existingProjection => existingProjection.GetType() == projection.GetType()))
+                        if (!_projections.Any(existingProjection => existingProjection.GetType() == projection.GetType()))
                             _projections.Add(projection);
                     }
                 }
