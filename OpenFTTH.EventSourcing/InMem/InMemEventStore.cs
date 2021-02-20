@@ -1,13 +1,17 @@
-﻿using System;
+﻿using Aocl;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace OpenFTTH.EventSourcing.InMem
 {
+    /// <summary>
+    /// Should be used for testing only.
+    /// </summary>
     public class InMemEventStore : IEventStore
     {
-        private readonly ConcurrentDictionary<Guid, List<IEventEnvelope>> _events = new ConcurrentDictionary<Guid, List<IEventEnvelope>>();
+        private readonly ConcurrentDictionary<Guid, AppendOnlyList<IEventEnvelope>> _events = new ConcurrentDictionary<Guid, AppendOnlyList<IEventEnvelope>>();
 
         private ProjectionRepository _projectionRepository;
         public IProjectionRepository Projections => _projectionRepository;
@@ -41,14 +45,9 @@ namespace OpenFTTH.EventSourcing.InMem
 
         private void AddEventsToStore(Guid streamId, List<IEventEnvelope> events)
         {
-            _events.AddOrUpdate(streamId, events, (streamId, existingStreamEvents) => 
-                {
-                    var newEventList = new List<IEventEnvelope>();
-                    newEventList.AddRange(existingStreamEvents);
-                    newEventList.AddRange(events);
-                    return newEventList;
-                }
-            );
+            var stream = _events.GetOrAdd(streamId, new AppendOnlyList<IEventEnvelope>());
+
+            stream.AppendRange(events);
         }
 
         public object[] FetchStream(Guid streamId, long version = 0)
