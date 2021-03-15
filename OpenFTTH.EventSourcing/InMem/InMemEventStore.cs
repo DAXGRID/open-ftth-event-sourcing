@@ -26,7 +26,7 @@ namespace OpenFTTH.EventSourcing.InMem
             _projectionRepository = new ProjectionRepository(serviceProvider);
         }
 
-        public void AppendStream(Guid streamId, long expectedVersion, object[] events)
+        public void AppendStream(Guid streamId, int expectedVersion, object[] events)
         {
             List<IEventEnvelope> eventEnvelopes = new List<IEventEnvelope>();
 
@@ -35,7 +35,7 @@ namespace OpenFTTH.EventSourcing.InMem
             foreach (var @event in events)
             {
                 version++;
-                eventEnvelopes.Add(new EventEnvelope(streamId, version, @event));
+                eventEnvelopes.Add(new EventEnvelope(streamId, Guid.Empty, version, 0, @event));
             }
 
             AddEventsToStore(streamId, eventEnvelopes);
@@ -50,7 +50,7 @@ namespace OpenFTTH.EventSourcing.InMem
             stream.AppendRange(events);
         }
 
-        public object[] FetchStream(Guid streamId, long version = 0)
+        public object[] FetchStream(Guid streamId, int version = 0)
         {
             if (!_events.ContainsKey(streamId))
             {
@@ -60,6 +60,11 @@ namespace OpenFTTH.EventSourcing.InMem
             {
                 return _events[streamId].Select(p => p.Data).ToArray();
             }
+        }
+
+        public void DehydrateProjections()
+        {
+            throw new NotImplementedException();
         }
     }
 }

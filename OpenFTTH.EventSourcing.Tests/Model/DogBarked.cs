@@ -8,10 +8,10 @@ namespace OpenFTTH.EventSourcing.Tests.Model
 
         public int VolumeInDb { get; }
 
-        public DogBarked(int volumeInDb)
+        public DogBarked(int volumeInDb, DateTime barkTimestamp)
         {
-            BarkTimestamp = DateTime.UtcNow;
             this.VolumeInDb = volumeInDb;
+            this.BarkTimestamp = barkTimestamp;
         }
     }
 }

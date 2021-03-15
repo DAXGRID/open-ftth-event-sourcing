@@ -4,9 +4,10 @@ namespace OpenFTTH.EventSourcing
 {
     public interface IEventEnvelope
     {
-        Guid StreamId { get; }
-        Type EventType { get; }
-        long Version { get; }
+        public Guid StreamId { get; }
+        public Guid EventId { get; }
+        public long Version { get; }
+        public long GlobalVersion { get; }
         object Data { get; }
     }
 }

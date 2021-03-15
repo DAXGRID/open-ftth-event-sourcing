@@ -5,16 +5,18 @@ namespace OpenFTTH.EventSourcing
     public class EventEnvelope : IEventEnvelope
     {
         public Guid StreamId { get; }
-        public Type EventType { get; }
+        public Guid EventId { get; }
         public long Version { get; }
+        public long GlobalVersion { get; }
         public object Data { get; }
 
-        public EventEnvelope(Guid streamId, long version, object data)
+        public EventEnvelope(Guid streamId, Guid eventId, long version, long globalVersion, object data)
         {
-            this.StreamId = streamId;
-            this.Version = version;
-            this.Data = data;
-            this.EventType = data.GetType();
+            StreamId = streamId;
+            EventId = eventId;
+            Version = version;
+            GlobalVersion = globalVersion;
+            Data = data;
         }
     }
 }

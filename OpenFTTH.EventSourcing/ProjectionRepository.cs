@@ -36,6 +36,16 @@ namespace OpenFTTH.EventSourcing
             }
         }
 
+        internal void ApplyEvent(IEventEnvelope @event)
+        {
+            ScanServiceProviderForProjections();
+
+            foreach (var projection in _projections)
+            {
+                projection.Apply(@event);
+            }
+        }
+
         private void ScanServiceProviderForProjections()
         {
             if (_serviceProvider != null && !_serviceProviderHasBeenScanned)

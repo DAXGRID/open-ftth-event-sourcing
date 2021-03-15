@@ -31,7 +31,7 @@ namespace OpenFTTH.EventSourcing.Tests.Model
 
         public void Bark(int volumneInDb)
         {
-            RaiseEvent(new DogBarked(volumneInDb));
+            RaiseEvent(new DogBarked(volumneInDb, DateTime.Now));
         }
 
         public void Poop(int weightInGrams)

@@ -27,11 +27,9 @@ namespace OpenFTTH.EventSourcing
         {
             foreach (var @event in events)
             {
-                var eventType = @event.EventType;
+                var eventType = @event.Data.GetType();
 
-                MyEventHandler handler;
-
-                if (_handlers.TryGetValue(eventType, out handler))
+                if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
                 {
                     handler.Handler(@event);
                 }
@@ -42,6 +40,24 @@ namespace OpenFTTH.EventSourcing
                         if (eventType.IsSubclassOf(handlerRegistered.Key))
                             handlerRegistered.Value.Handler(@event);
                     }
+                }
+            }
+        }
+
+        public void Apply(IEventEnvelope @event)
+        {
+            var eventType = @event.Data.GetType();
+
+            if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
+            {
+                handler.Handler(@event);
+            }
+            else
+            {
+                foreach (var handlerRegistered in _handlers)
+                {
+                    if (eventType.IsSubclassOf(handlerRegistered.Key))
+                        handlerRegistered.Value.Handler(@event);
                 }
             }
         }
