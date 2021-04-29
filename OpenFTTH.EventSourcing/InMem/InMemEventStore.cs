@@ -19,11 +19,16 @@ namespace OpenFTTH.EventSourcing.InMem
         private AggregateRepository _aggregateRepository;
         public IAggregateRepository Aggregates => _aggregateRepository;
 
+        private ICommandLog _commandLog;
+        public ICommandLog CommandLog => _commandLog;
+
         public InMemEventStore(IServiceProvider serviceProvider)
         {
             _aggregateRepository = new AggregateRepository(this);
 
             _projectionRepository = new ProjectionRepository(serviceProvider);
+
+            _commandLog = new InMemCommandLog();
         }
 
         public void AppendStream(Guid streamId, int expectedVersion, object[] events)

@@ -8,7 +8,7 @@ namespace OpenFTTH.EventSourcing
         object[] FetchStream(Guid streamId, int version = 0);
         IProjectionRepository Projections { get; }
         IAggregateRepository Aggregates { get; }
-
+        ICommandLog CommandLog { get; }
         public void DehydrateProjections();
     }
 }

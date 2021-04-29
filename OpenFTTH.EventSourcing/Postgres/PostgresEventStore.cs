@@ -21,6 +21,9 @@ namespace OpenFTTH.EventSourcing.Postgres
         private AggregateRepository _aggregateRepository;
         public IAggregateRepository Aggregates => _aggregateRepository;
 
+        private ICommandLog _commandLog;
+        public ICommandLog CommandLog => _commandLog;
+
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
             _aggregateRepository = new AggregateRepository(this);
@@ -38,6 +41,8 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             if (cleanAll)
                 _store.Advanced.Clean.CompletelyRemoveAll();
+
+            _commandLog = new PostgresCommandLog(_store);
         }
 
         public void Store(AggregateBase aggregate)

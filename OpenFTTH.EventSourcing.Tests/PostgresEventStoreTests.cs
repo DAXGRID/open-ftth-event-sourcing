@@ -1,10 +1,12 @@
 using FluentAssertions;
+using FluentResults;
 using Marten;
 using OpenFTTH.EventSourcing.InMem;
 using OpenFTTH.EventSourcing.Postgres;
 using OpenFTTH.EventSourcing.Tests.Model;
 using System;
 using System.Diagnostics;
+using System.Linq;
 using Xunit;
 
 namespace OpenFTTH.EventSourcing.Tests
@@ -86,7 +88,7 @@ namespace OpenFTTH.EventSourcing.Tests
             var eventStore = new InMemEventStore(null) as IEventStore;
 
             Guid newDogId = Guid.NewGuid();
-  
+
             var newDog = eventStore.Aggregates.Load<DogAggregate>(newDogId);
 
             newDog.Version.Should().Be(0);
@@ -105,7 +107,7 @@ namespace OpenFTTH.EventSourcing.Tests
 
             Stopwatch sw = new Stopwatch();
             sw.Start();
-            for (int i= 0; i < 1000; i++)
+            for (int i = 0; i < 1000; i++)
             {
                 var dog = new DogAggregate(Guid.NewGuid(), "Dog name");
                 dog.Poop(2000);
@@ -142,5 +144,25 @@ namespace OpenFTTH.EventSourcing.Tests
             poopProjection.PoopReport.Count.Should().Be(1000);
         }
 
+        [Fact]
+        public void CommandLogTest()
+        {
+            if (_connectionString == null)
+                return;
+
+            var eventStore = new PostgresEventStore(null, _connectionString, "TestCommandLog", true) as IEventStore;
+
+            var myCmd = new TestCommand() { CmdId = Guid.NewGuid(), Name = "Hans", Weight = 120 };
+            var failedResult = Result.Fail("Command failed for some reason. DOH!");
+            var myCmdLogEntry = new CommandLogEntry(myCmd, failedResult);
+
+            eventStore.CommandLog.Store(myCmdLogEntry);
+
+            var myCmdLogEntryFromLoad = eventStore.CommandLog.Load(myCmd.CmdId);
+
+            // Assert
+            myCmdLogEntryFromLoad.IsSuccess.Should().BeFalse();
+            myCmdLogEntryFromLoad.ErrorMessages.Should().Contain(failedResult.Errors.First().Message);
+        }
     }
 }
