@@ -24,6 +24,9 @@ namespace OpenFTTH.EventSourcing.Postgres
         private ICommandLog _commandLog;
         public ICommandLog CommandLog => _commandLog;
 
+        private ISequences _sequences;
+        public ISequences Sequences => _sequences;
+
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
             _aggregateRepository = new AggregateRepository(this);
@@ -32,6 +35,11 @@ namespace OpenFTTH.EventSourcing.Postgres
             var options = new StoreOptions();
             options.Connection(connectionString);
             options.Events.Projections.Add(new Projection(_projectionRepository));
+
+            // Serialize enums as strings
+            var serializer = new Marten.Services.JsonNetSerializer();
+            serializer.EnumStorage = EnumStorage.AsString;
+            options.Serializer(serializer);
 
             // Can be overridden
             options.AutoCreateSchemaObjects = AutoCreate.All;
@@ -43,6 +51,8 @@ namespace OpenFTTH.EventSourcing.Postgres
                 _store.Advanced.Clean.CompletelyRemoveAll();
 
             _commandLog = new PostgresCommandLog(_store);
+
+            _sequences = new PostgresSequenceStore(connectionString, databaseSchemaName);
         }
 
         public void Store(AggregateBase aggregate)

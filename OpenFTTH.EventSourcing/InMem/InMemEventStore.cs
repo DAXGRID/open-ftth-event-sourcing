@@ -22,6 +22,10 @@ namespace OpenFTTH.EventSourcing.InMem
         private ICommandLog _commandLog;
         public ICommandLog CommandLog => _commandLog;
 
+        private ISequences _sequences;
+        public ISequences Sequences => _sequences;
+
+
         public InMemEventStore(IServiceProvider serviceProvider)
         {
             _aggregateRepository = new AggregateRepository(this);
@@ -29,6 +33,8 @@ namespace OpenFTTH.EventSourcing.InMem
             _projectionRepository = new ProjectionRepository(serviceProvider);
 
             _commandLog = new InMemCommandLog();
+
+            _sequences = new InMemSequenceStore();
         }
 
         public void AppendStream(Guid streamId, int expectedVersion, object[] events)

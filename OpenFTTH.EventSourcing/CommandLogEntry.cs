@@ -1,5 +1,4 @@
 ﻿using FluentResults;
-using OpenFTTH.CQRS;
 using System;
 using System.Collections.Generic;
 
@@ -8,13 +7,13 @@ namespace OpenFTTH.EventSourcing
     public record CommandLogEntry
     {
         public Guid Id { get; init; }
-        public BaseCommand Command { get; init; }
+        public object Command { get; init; }
         public bool IsSuccess { get; init; }
         public List<string> ErrorMessages { get; init; }
 
-        public CommandLogEntry(BaseCommand command, Result result)
+        public CommandLogEntry(Guid id, object command, Result result)
         {
-            Id = command.CmdId;
+            Id = id;
             Command = command;
 
             if (result != null)

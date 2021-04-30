@@ -9,6 +9,7 @@ namespace OpenFTTH.EventSourcing
         IProjectionRepository Projections { get; }
         IAggregateRepository Aggregates { get; }
         ICommandLog CommandLog { get; }
+        ISequences Sequences { get; }
         public void DehydrateProjections();
     }
 }

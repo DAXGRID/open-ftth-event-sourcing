@@ -1,6 +1,5 @@
 using FluentAssertions;
 using FluentResults;
-using Marten;
 using OpenFTTH.EventSourcing.InMem;
 using OpenFTTH.EventSourcing.Postgres;
 using OpenFTTH.EventSourcing.Tests.Model;
@@ -152,9 +151,9 @@ namespace OpenFTTH.EventSourcing.Tests
 
             var eventStore = new PostgresEventStore(null, _connectionString, "TestCommandLog", true) as IEventStore;
 
-            var myCmd = new TestCommand() { CmdId = Guid.NewGuid(), Name = "Hans", Weight = 120 };
+            var myCmd = new TestCommand() { CmdId = Guid.NewGuid(), Name = "Hans", Weight = 120, Gender = Gender.Male };
             var failedResult = Result.Fail("Command failed for some reason. DOH!");
-            var myCmdLogEntry = new CommandLogEntry(myCmd, failedResult);
+            var myCmdLogEntry = new CommandLogEntry(myCmd.CmdId, myCmd, failedResult);
 
             eventStore.CommandLog.Store(myCmdLogEntry);
 
@@ -163,6 +162,35 @@ namespace OpenFTTH.EventSourcing.Tests
             // Assert
             myCmdLogEntryFromLoad.IsSuccess.Should().BeFalse();
             myCmdLogEntryFromLoad.ErrorMessages.Should().Contain(failedResult.Errors.First().Message);
+        }
+
+        [Fact]
+        public void SequenceTest()
+        {
+            if (_connectionString == null)
+                return;
+
+            var eventStore = new PostgresEventStore(null, _connectionString, "TestSequences", true) as IEventStore;
+
+            eventStore.Sequences.DropSequence("seq1");
+            eventStore.Sequences.DropSequence("seq2");
+
+            var seq1val = eventStore.Sequences.GetNextVal("seq1");
+            seq1val.Should().Be(1);
+
+            var seq2val = eventStore.Sequences.GetNextVal("seq2");
+            seq1val.Should().Be(1);
+
+            // bump seq1
+            seq1val = eventStore.Sequences.GetNextVal("seq1");
+            seq1val.Should().Be(2);
+            seq2val.Should().Be(1);
+
+            // bump seq2
+            seq2val = eventStore.Sequences.GetNextVal("seq2");
+            seq1val.Should().Be(2);
+            seq2val.Should().Be(2);
+
         }
     }
 }
