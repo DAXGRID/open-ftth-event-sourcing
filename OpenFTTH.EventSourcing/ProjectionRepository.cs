@@ -77,5 +77,13 @@ namespace OpenFTTH.EventSourcing
 
             throw new ArgumentException($"Cant find projection of type: {typeof(T).Name}");
         }
+
+        internal void DehydrationFinish()
+        {
+            foreach (var projection in _projections)
+            {
+                projection.DehydrationFinish();
+            }
+        }
     }
 }

@@ -7,5 +7,7 @@ namespace OpenFTTH.EventSourcing
         void Apply(IReadOnlyList<IEventEnvelope> events);
 
         void Apply(IEventEnvelope @event);
+
+        void DehydrationFinish();
     }
 }

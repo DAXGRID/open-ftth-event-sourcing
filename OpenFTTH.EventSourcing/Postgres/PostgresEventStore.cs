@@ -15,6 +15,8 @@ namespace OpenFTTH.EventSourcing.Postgres
     {
         private readonly IDocumentStore _store;
 
+        private long _lastSequenceNumberProcessed;
+
         private ProjectionRepository _projectionRepository;
         public IProjectionRepository Projections => _projectionRepository;
 
@@ -26,6 +28,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
+       
 
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
@@ -119,10 +122,31 @@ namespace OpenFTTH.EventSourcing.Postgres
         public void DehydrateProjections()
         {
             using var session = _store.LightweightSession();
+
             foreach (var martenEvent in session.Events.QueryAllRawEvents().OrderBy(e => e.Sequence))
             {
                 _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
+
+            _projectionRepository.DehydrationFinish();
+        }
+
+        public long CatchUp()
+        {
+            using var session = _store.LightweightSession();
+
+            long eventsProcessed = 0;
+
+            foreach (var martenEvent in session.Events.QueryAllRawEvents().Where(e => e.Sequence > _lastSequenceNumberProcessed).OrderBy(e => e.Sequence))
+            {
+                eventsProcessed++;
+                _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
+            }
+
+            return eventsProcessed;
         }
 
         public class Projection : Marten.Events.Projections.IProjection

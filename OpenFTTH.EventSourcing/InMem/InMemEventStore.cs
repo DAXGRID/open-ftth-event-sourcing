@@ -77,5 +77,10 @@ namespace OpenFTTH.EventSourcing.InMem
         {
             throw new NotImplementedException();
         }
+
+        public long CatchUp()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

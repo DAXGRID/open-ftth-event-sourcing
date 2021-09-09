@@ -66,6 +66,11 @@ namespace OpenFTTH.EventSourcing
         {
             public Func<object, Task> Handler { get; set; }
         }
+
+        public virtual void DehydrationFinish()
+        {
+
+        }
     }
     
 }

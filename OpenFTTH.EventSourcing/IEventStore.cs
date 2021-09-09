@@ -11,5 +11,6 @@ namespace OpenFTTH.EventSourcing
         ICommandLog CommandLog { get; }
         ISequences Sequences { get; }
         public void DehydrateProjections();
+        public long CatchUp();
     }
 }
