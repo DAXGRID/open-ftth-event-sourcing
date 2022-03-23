@@ -28,7 +28,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
-       
+
 
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
@@ -133,6 +133,21 @@ namespace OpenFTTH.EventSourcing.Postgres
             _projectionRepository.DehydrationFinish();
         }
 
+        public async Task DehydrateProjectionsAsync()
+        {
+            using var session = _store.LightweightSession();
+
+            foreach (var martenEvent in session.Events.QueryAllRawEvents().OrderBy(e => e.Sequence))
+            {
+                await _projectionRepository.ApplyEventAsync(
+                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
+
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
+            }
+
+            _projectionRepository.DehydrationFinish();
+        }
+
         public long CatchUp()
         {
             using var session = _store.LightweightSession();
@@ -148,6 +163,24 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             return eventsProcessed;
         }
+
+        public async Task<long> CatchUpAsync()
+        {
+            using var session = _store.LightweightSession();
+
+            long eventsProcessed = 0;
+
+            foreach (var martenEvent in session.Events.QueryAllRawEvents().Where(e => e.Sequence > _lastSequenceNumberProcessed).OrderBy(e => e.Sequence))
+            {
+                eventsProcessed++;
+                await _projectionRepository.ApplyEventAsync(
+                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
+            }
+
+            return eventsProcessed;
+        }
+
 
         public class Projection : Marten.Events.Projections.IProjection
         {
