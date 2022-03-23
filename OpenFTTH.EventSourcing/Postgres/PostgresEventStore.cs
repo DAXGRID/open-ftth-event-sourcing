@@ -28,7 +28,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
-       
+
 
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
@@ -133,6 +133,21 @@ namespace OpenFTTH.EventSourcing.Postgres
             _projectionRepository.DehydrationFinish();
         }
 
+        public async Task DehydrateProjectionsAsync()
+        {
+            using var session = _store.LightweightSession();
+
+            foreach (var martenEvent in session.Events.QueryAllRawEvents().OrderBy(e => e.Sequence))
+            {
+                await _projectionRepository.ApplyEventAsync(
+                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
+
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
+            }
+
+            _projectionRepository.DehydrationFinish();
+        }
+
         public long CatchUp()
         {
             using var session = _store.LightweightSession();
@@ -149,28 +164,31 @@ namespace OpenFTTH.EventSourcing.Postgres
             return eventsProcessed;
         }
 
+        public async Task<long> CatchUpAsync()
+        {
+            using var session = _store.LightweightSession();
+
+            long eventsProcessed = 0;
+
+            foreach (var martenEvent in session.Events.QueryAllRawEvents().Where(e => e.Sequence > _lastSequenceNumberProcessed).OrderBy(e => e.Sequence))
+            {
+                eventsProcessed++;
+                await _projectionRepository.ApplyEventAsync(
+                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
+                _lastSequenceNumberProcessed = martenEvent.Sequence;
+            }
+
+            return eventsProcessed;
+        }
+
         public class Projection : Marten.Events.Projections.IProjection
         {
             private ProjectionRepository _projectionRepository;
-            public Guid Id { get; set; }
-
-            public string Name { get; set; }
 
             public Projection(ProjectionRepository projectionRepository)
             {
                 _projectionRepository = projectionRepository;
             }
-
-
-            public void EnsureStorageExists(ITenant tenant)
-            {
-                //tenant.EnsureStorageExists(typeof(QuestPatchTestProjection));
-            }
-
-            public Type[] Consumes { get; } = new Type[] { /*typeof(SomethingHappend)*/ };
-
-            public AsyncOptions AsyncOptions { get; } = new AsyncOptions();
-
 
             public void Apply(IDocumentOperations operations, IReadOnlyList<StreamAction> streams)
             {
@@ -181,11 +199,14 @@ namespace OpenFTTH.EventSourcing.Postgres
                 }
             }
 
-            public Task ApplyAsync(IDocumentOperations operations, IReadOnlyList<StreamAction> streams, CancellationToken cancellation)
+            public async Task ApplyAsync(IDocumentOperations operations, IReadOnlyList<StreamAction> streams, CancellationToken cancellation)
             {
-                return Task.CompletedTask;
+                foreach (var stream in streams)
+                {
+                    var events = stream.Events.Select(e => new EventEnvelope(stream.Id, e.Id, e.Version, e.Sequence, e.Data)).ToList().AsReadOnly();
+                    await _projectionRepository.ApplyEventsAsync(events).ConfigureAwait(false);
+                }
             }
         }
-
     }
 }

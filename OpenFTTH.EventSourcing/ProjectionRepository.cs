@@ -36,6 +36,16 @@ namespace OpenFTTH.EventSourcing
             }
         }
 
+        internal async Task ApplyEventsAsync(IReadOnlyList<IEventEnvelope> events)
+        {
+            ScanServiceProviderForProjections();
+
+            foreach (var projection in _projections)
+            {
+                await projection.ApplyAsync(events).ConfigureAwait(false);
+            }
+        }
+
         internal void ApplyEvent(IEventEnvelope @event)
         {
             ScanServiceProviderForProjections();
@@ -43,6 +53,16 @@ namespace OpenFTTH.EventSourcing
             foreach (var projection in _projections)
             {
                 projection.Apply(@event);
+            }
+        }
+
+        internal async Task ApplyEventAsync(IEventEnvelope @event)
+        {
+            ScanServiceProviderForProjections();
+
+            foreach (var projection in _projections)
+            {
+                await projection.ApplyAsync(@event).ConfigureAwait(false);
             }
         }
 
