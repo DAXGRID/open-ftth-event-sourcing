@@ -181,29 +181,14 @@ namespace OpenFTTH.EventSourcing.Postgres
             return eventsProcessed;
         }
 
-
         public class Projection : Marten.Events.Projections.IProjection
         {
             private ProjectionRepository _projectionRepository;
-            public Guid Id { get; set; }
-
-            public string Name { get; set; }
 
             public Projection(ProjectionRepository projectionRepository)
             {
                 _projectionRepository = projectionRepository;
             }
-
-
-            public void EnsureStorageExists(ITenant tenant)
-            {
-                //tenant.EnsureStorageExists(typeof(QuestPatchTestProjection));
-            }
-
-            public Type[] Consumes { get; } = new Type[] { /*typeof(SomethingHappend)*/ };
-
-            public AsyncOptions AsyncOptions { get; } = new AsyncOptions();
-
 
             public void Apply(IDocumentOperations operations, IReadOnlyList<StreamAction> streams)
             {
@@ -214,11 +199,14 @@ namespace OpenFTTH.EventSourcing.Postgres
                 }
             }
 
-            public Task ApplyAsync(IDocumentOperations operations, IReadOnlyList<StreamAction> streams, CancellationToken cancellation)
+            public async Task ApplyAsync(IDocumentOperations operations, IReadOnlyList<StreamAction> streams, CancellationToken cancellation)
             {
-                return Task.CompletedTask;
+                foreach (var stream in streams)
+                {
+                    var events = stream.Events.Select(e => new EventEnvelope(stream.Id, e.Id, e.Version, e.Sequence, e.Data)).ToList().AsReadOnly();
+                    await _projectionRepository.ApplyEventsAsync(events).ConfigureAwait(false);
+                }
             }
         }
-
     }
 }

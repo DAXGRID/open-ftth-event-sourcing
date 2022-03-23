@@ -38,6 +38,42 @@ namespace OpenFTTH.EventSourcing
             _handlers.Add(typeof(TEvent), myHandler);
         }
 
+        public void Apply(IEventEnvelope @event)
+        {
+            var eventType = @event.Data.GetType();
+
+            if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
+            {
+                handler.Handler(@event);
+            }
+            else
+            {
+                foreach (var handlerRegistered in _handlers)
+                {
+                    if (eventType.IsSubclassOf(handlerRegistered.Key))
+                        handlerRegistered.Value.Handler(@event);
+                }
+            }
+        }
+
+        public async Task ApplyAsync(IEventEnvelope @event)
+        {
+            var eventType = @event.Data.GetType();
+
+            if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
+            {
+                await handler.Handler(@event).ConfigureAwait(false);
+            }
+            else
+            {
+                foreach (var handlerRegistered in _handlers)
+                {
+                    if (eventType.IsSubclassOf(handlerRegistered.Key))
+                        await handlerRegistered.Value.Handler(@event).ConfigureAwait(false);
+                }
+            }
+        }
+
         public void Apply(IReadOnlyList<IEventEnvelope> events)
         {
             foreach (var @event in events)
@@ -59,20 +95,23 @@ namespace OpenFTTH.EventSourcing
             }
         }
 
-        public void Apply(IEventEnvelope @event)
+        public async Task ApplyAsync(IReadOnlyList<IEventEnvelope> events)
         {
-            var eventType = @event.Data.GetType();
+            foreach (var @event in events)
+            {
+                var eventType = @event.Data.GetType();
 
-            if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
-            {
-                handler.Handler(@event);
-            }
-            else
-            {
-                foreach (var handlerRegistered in _handlers)
+                if (_handlers.TryGetValue(eventType, out MyEventHandler handler))
                 {
-                    if (eventType.IsSubclassOf(handlerRegistered.Key))
-                        handlerRegistered.Value.Handler(@event);
+                    await handler.Handler(@event).ConfigureAwait(false);
+                }
+                else
+                {
+                    foreach (var handlerRegistered in _handlers)
+                    {
+                        if (eventType.IsSubclassOf(handlerRegistered.Key))
+                            await handlerRegistered.Value.Handler(@event).ConfigureAwait(false);
+                    }
                 }
             }
         }

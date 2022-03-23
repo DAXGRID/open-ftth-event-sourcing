@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing.InMem
 {
@@ -25,15 +26,11 @@ namespace OpenFTTH.EventSourcing.InMem
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
 
-
         public InMemEventStore(IServiceProvider serviceProvider)
         {
             _aggregateRepository = new AggregateRepository(this);
-
             _projectionRepository = new ProjectionRepository(serviceProvider);
-
             _commandLog = new InMemCommandLog();
-
             _sequences = new InMemSequenceStore();
         }
 
@@ -79,6 +76,16 @@ namespace OpenFTTH.EventSourcing.InMem
         }
 
         public long CatchUp()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task DehydrateProjectionsAsync()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<long> CatchUpAsync()
         {
             throw new NotImplementedException();
         }
