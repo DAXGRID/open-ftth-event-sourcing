@@ -14,10 +14,25 @@ namespace OpenFTTH.EventSourcing
         {
             var myHandler = new MyEventHandler()
             {
-                Handler = (@event) => {
+                Handler = (@event) =>
+                {
                     handler(@event as IEventEnvelope);
                     return Task.CompletedTask;
                 }
+            };
+
+            _handlers.Add(typeof(TEvent), myHandler);
+        }
+
+        public void ProjectEventAsync<TEvent>(Func<IEventEnvelope, Task> handler)
+            where TEvent : class
+        {
+            var myHandler = new MyEventHandler()
+            {
+                Handler = async (@event) =>
+               {
+                   await handler(@event as IEventEnvelope);
+               }
             };
 
             _handlers.Add(typeof(TEvent), myHandler);
@@ -72,5 +87,4 @@ namespace OpenFTTH.EventSourcing
 
         }
     }
-    
 }
