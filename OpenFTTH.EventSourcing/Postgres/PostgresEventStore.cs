@@ -145,7 +145,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
 
-            _projectionRepository.DehydrationFinish();
+            await _projectionRepository.DehydrationFinishAsync().ConfigureAwait(false);
         }
 
         public long CatchUp()
