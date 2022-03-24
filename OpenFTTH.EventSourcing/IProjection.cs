@@ -10,5 +10,6 @@ namespace OpenFTTH.EventSourcing
         void Apply(IEventEnvelope @event);
         Task ApplyAsync(IEventEnvelope @event);
         void DehydrationFinish();
+        Task DehydrationFinishAsync();
     }
 }
