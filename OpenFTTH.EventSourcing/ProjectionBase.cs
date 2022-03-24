@@ -125,5 +125,10 @@ namespace OpenFTTH.EventSourcing
         {
 
         }
+
+        public virtual async Task DehydrationFinishAsync()
+        {
+            await Task.CompletedTask;
+        }
     }
 }

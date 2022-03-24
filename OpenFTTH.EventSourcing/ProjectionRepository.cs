@@ -105,5 +105,13 @@ namespace OpenFTTH.EventSourcing
                 projection.DehydrationFinish();
             }
         }
+
+        internal async Task DehydrationFinishAsync()
+        {
+            foreach (var projection in _projections)
+            {
+                await projection.DehydrationFinishAsync().ConfigureAwait(false);
+            }
+        }
     }
 }
