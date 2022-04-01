@@ -123,7 +123,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(x => eventTypes.Contains(x.DotNetTypeName))
+                .Where(x => x.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -142,10 +142,8 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(x => eventTypes.Contains(x.DotNetTypeName))
+                .Where(x => x.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence);
-
-            Console.WriteLine("eventTypes: " + String.Join(" - ", eventTypes));
 
             foreach (var martenEvent in events)
             {
@@ -164,9 +162,8 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             long eventsProcessed = 0;
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
-
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && eventTypes.Contains(e.DotNetTypeName))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -185,7 +182,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && eventTypes.Contains(e.DotNetTypeName))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence);
 
             long eventsProcessed = 0;
