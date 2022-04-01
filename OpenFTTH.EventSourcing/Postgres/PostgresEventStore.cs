@@ -121,7 +121,11 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
-            foreach (var martenEvent in session.Events.QueryAllRawEvents().OrderBy(e => e.Sequence))
+            var events = session.Events.QueryAllRawEvents()
+                .Where(x => _projectionRepository.ProjectionFullNames.Contains(x.DotNetTypeName))
+                .OrderBy(e => e.Sequence);
+
+            foreach (var martenEvent in events)
             {
                 _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
 
@@ -135,7 +139,11 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
-            foreach (var martenEvent in session.Events.QueryAllRawEvents().OrderBy(e => e.Sequence))
+            var events = session.Events.QueryAllRawEvents()
+                .Where(x => _projectionRepository.ProjectionFullNames.Contains(x.DotNetTypeName))
+                .OrderBy(e => e.Sequence);
+
+            foreach (var martenEvent in events)
             {
                 await _projectionRepository.ApplyEventAsync(
                     new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
@@ -151,8 +159,11 @@ namespace OpenFTTH.EventSourcing.Postgres
             using var session = _store.LightweightSession();
 
             long eventsProcessed = 0;
+            var events = session.Events.QueryAllRawEvents()
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && _projectionRepository.ProjectionFullNames.Contains(e.DotNetTypeName))
+                .OrderBy(e => e.Sequence);
 
-            foreach (var martenEvent in session.Events.QueryAllRawEvents().Where(e => e.Sequence > _lastSequenceNumberProcessed).OrderBy(e => e.Sequence))
+            foreach (var martenEvent in events)
             {
                 eventsProcessed++;
                 _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
@@ -166,9 +177,13 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
+            var events = session.Events.QueryAllRawEvents()
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && _projectionRepository.ProjectionFullNames.Contains(e.DotNetTypeName))
+                .OrderBy(e => e.Sequence);
+
             long eventsProcessed = 0;
 
-            foreach (var martenEvent in session.Events.QueryAllRawEvents().Where(e => e.Sequence > _lastSequenceNumberProcessed).OrderBy(e => e.Sequence))
+            foreach (var martenEvent in events)
             {
                 eventsProcessed++;
                 await _projectionRepository.ApplyEventAsync(
