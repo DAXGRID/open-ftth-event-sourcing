@@ -199,7 +199,7 @@ namespace OpenFTTH.EventSourcing.Postgres
         }
 
         private List<string> GetMartenDotNetTypeFormat(List<IProjection> projections)
-            => projections.Select(x => $"{x.GetType().FullName}, {x.GetType().Assembly.FullName}").ToList();
+            => projections.Select(x => $"{x.GetType().FullName}, {x.GetType().Assembly.GetName().Name}").ToList();
 
         public class Projection : Marten.Events.Projections.IProjection
         {
