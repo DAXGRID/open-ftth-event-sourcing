@@ -35,15 +35,15 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             var options = new StoreOptions();
             options.Connection(connectionString);
-            options.Events.Projections.Add(new Projection(_projectionRepository));
+            options.Projections.Add(new Projection(_projectionRepository));
 
             // Serialize enums as strings
             var serializer = new Marten.Services.JsonNetSerializer();
-            serializer.EnumStorage = EnumStorage.AsString;
+            serializer.EnumStorage = Weasel.Core.EnumStorage.AsString;
             options.Serializer(serializer);
 
             // Can be overridden
-            options.AutoCreateSchemaObjects = AutoCreate.All;
+            options.AutoCreateSchemaObjects = Weasel.Core.AutoCreate.All;
             options.DatabaseSchemaName = databaseSchemaName;
 
             _store = new DocumentStore(options);
