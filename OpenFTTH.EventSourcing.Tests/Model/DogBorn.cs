@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace OpenFTTH.EventSourcing.Tests.Model
+﻿namespace OpenFTTH.EventSourcing.Tests.Model
 {
     public class DogBorn
     {
