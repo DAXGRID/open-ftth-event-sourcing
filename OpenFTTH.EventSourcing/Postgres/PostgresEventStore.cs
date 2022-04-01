@@ -204,7 +204,7 @@ namespace OpenFTTH.EventSourcing.Postgres
         private List<string> GetMartenDotNetTypeFormat(List<IProjection> projections) =>
             projections
             .SelectMany(x => x.GetHandlerEventTypes())
-            .Select(x => $"{x.GetType().FullName}, {x.GetType().Assembly.GetName().Name}")
+            .Select(x => $"{x.FullName}, {x.Assembly.GetName().Name}")
             .Distinct() // We Distinct to remove all duplicates
             .ToList();
 
