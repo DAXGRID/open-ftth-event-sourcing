@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing
@@ -8,6 +9,9 @@ namespace OpenFTTH.EventSourcing
     public class ProjectionBase : IProjection
     {
         private readonly IDictionary<Type, MyEventHandler> _handlers = new ConcurrentDictionary<Type, MyEventHandler>();
+
+        public List<Type> GetHandlerEventTypes()
+            => _handlers.Keys.ToList();
 
         public void ProjectEvent<TEvent>(Action<IEventEnvelope> handler)
             where TEvent : class
