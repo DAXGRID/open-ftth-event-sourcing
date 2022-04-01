@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing
@@ -11,5 +12,6 @@ namespace OpenFTTH.EventSourcing
         Task ApplyAsync(IEventEnvelope @event);
         void DehydrationFinish();
         Task DehydrationFinishAsync();
+        List<Type> GetHandlerEventTypes();
     }
 }
