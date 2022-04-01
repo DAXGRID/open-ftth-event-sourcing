@@ -1,13 +1,9 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using OpenFTTH.EventSourcing.Tests.Model;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Xunit;
-using FluentAssertions;
-using System.Threading;
 
 namespace OpenFTTH.EventSourcing.Tests
 {
@@ -26,7 +22,7 @@ namespace OpenFTTH.EventSourcing.Tests
         [Fact]
         public void TestThatProjectionAreAutomaticallyPickedUpInIoCByEventStore()
         {
-            
+
             // Setup
             var poopProjection = _serviceProvider.GetServices<IProjection>().First(p => p is PoopProjection) as PoopProjection;
 

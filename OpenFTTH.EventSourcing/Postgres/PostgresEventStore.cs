@@ -1,7 +1,5 @@
 ﻿using Marten;
 using Marten.Events;
-using Marten.Events.Daemon;
-using Marten.Storage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
