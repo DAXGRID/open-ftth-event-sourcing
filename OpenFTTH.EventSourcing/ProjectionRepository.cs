@@ -11,12 +11,13 @@ namespace OpenFTTH.EventSourcing
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ConcurrentBag<IProjection> _projections = new ConcurrentBag<IProjection>();
-        internal List<string> ProjectionFullNames => _projections.Select(x => x.GetType().FullName).ToList();
+        internal readonly List<string> ProjectionFullNames = new List<string>();
 
         public ProjectionRepository(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
             ScanServiceProviderForProjections();
+            ProjectionFullNames = _projections.Select(x => x.GetType().FullName).ToList();
         }
 
         public void Add(IProjection projection)
