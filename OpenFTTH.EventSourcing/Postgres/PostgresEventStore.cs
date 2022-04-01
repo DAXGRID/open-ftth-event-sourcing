@@ -121,8 +121,9 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
+            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(x => _projectionRepository.ProjectionFullNames.Contains(x.DotNetTypeName))
+                .Where(x => eventTypes.Contains(x.DotNetTypeName))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -139,8 +140,9 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
+            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(x => _projectionRepository.ProjectionFullNames.Contains(x.DotNetTypeName))
+                .Where(x => eventTypes.Contains(x.DotNetTypeName))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -159,8 +161,9 @@ namespace OpenFTTH.EventSourcing.Postgres
             using var session = _store.LightweightSession();
 
             long eventsProcessed = 0;
+            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && _projectionRepository.ProjectionFullNames.Contains(e.DotNetTypeName))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && eventTypes.Contains(e.DotNetTypeName))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -177,8 +180,9 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             using var session = _store.LightweightSession();
 
+            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && _projectionRepository.ProjectionFullNames.Contains(e.DotNetTypeName))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed && eventTypes.Contains(e.DotNetTypeName))
                 .OrderBy(e => e.Sequence);
 
             long eventsProcessed = 0;
@@ -193,6 +197,9 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             return eventsProcessed;
         }
+
+        private List<string> GetMartenDotNetTypeFormat(List<IProjection> projections)
+            => projections.Select(x => $"{x.GetType().FullName}, {x.GetType().Assembly.FullName}").ToList();
 
         public class Projection : Marten.Events.Projections.IProjection
         {
