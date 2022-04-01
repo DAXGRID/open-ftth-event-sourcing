@@ -43,7 +43,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             options.Serializer(serializer);
 
             // Can be overridden
-            options.AutoCreateSchemaObjects = Weasel.Core.AutoCreate.All;
+            options.AutoCreateSchemaObjects = Weasel.Postgresql.AutoCreate.All;
             options.DatabaseSchemaName = databaseSchemaName;
 
             _store = new DocumentStore(options);
