@@ -143,13 +143,18 @@ namespace OpenFTTH.EventSourcing.Postgres
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
                 .Where(x => x.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence);
+                .OrderBy(e => e.Sequence)
+                .ToAsyncEnumerable();
 
-            foreach (var martenEvent in events)
+            await foreach (var martenEvent in events)
             {
                 await _projectionRepository.ApplyEventAsync(
-                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
-
+                    new EventEnvelope(
+                        martenEvent.StreamId,
+                        martenEvent.Id,
+                        martenEvent.Version,
+                        martenEvent.Sequence,
+                        martenEvent.Data)).ConfigureAwait(false);
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
 
@@ -183,15 +188,21 @@ namespace OpenFTTH.EventSourcing.Postgres
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
                 .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence);
+                .OrderBy(e => e.Sequence)
+                .ToAsyncEnumerable();
 
             long eventsProcessed = 0;
 
-            foreach (var martenEvent in events)
+            await foreach (var martenEvent in events)
             {
                 eventsProcessed++;
                 await _projectionRepository.ApplyEventAsync(
-                    new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data)).ConfigureAwait(false);
+                    new EventEnvelope(
+                        martenEvent.StreamId,
+                        martenEvent.Id,
+                        martenEvent.Version,
+                        martenEvent.Sequence,
+                        martenEvent.Data)).ConfigureAwait(false);
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
 
