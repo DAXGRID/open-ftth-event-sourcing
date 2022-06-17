@@ -1,6 +1,7 @@
 ﻿using Marten;
 using Marten.Events;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -14,6 +15,10 @@ namespace OpenFTTH.EventSourcing.Postgres
         private readonly IDocumentStore _store;
 
         private long _lastSequenceNumberProcessed;
+
+        private ConcurrentDictionary<Guid, bool> _inlineEventsNotCatchedUpYet = new();
+
+        public long NumberOfInlineEventsNotCatchedUp => _inlineEventsNotCatchedUpYet.Count;
 
         private ProjectionRepository _projectionRepository;
         public IProjectionRepository Projections => _projectionRepository;
@@ -107,7 +112,14 @@ namespace OpenFTTH.EventSourcing.Postgres
         public void AppendStream(Guid streamId, int expectedVersion, object[] events)
         {
             using var session = _store.LightweightSession();
-            session.Events.Append(streamId, expectedVersion, events);
+            var action = session.Events.Append(streamId, expectedVersion, events);
+
+            // Add event ids to inline event dictionary used to prevent events to be applied to projections again when catchup is called to retrieve events produced by other services
+            foreach (var e in action.Events)
+            {
+                _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+            }
+
             session.SaveChanges();
         }
 
@@ -174,7 +186,18 @@ namespace OpenFTTH.EventSourcing.Postgres
             foreach (var martenEvent in events)
             {
                 eventsProcessed++;
-                _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+
+                if (_inlineEventsNotCatchedUpYet.ContainsKey(martenEvent.Id))
+                {
+                    // Do nothing but remove the event id from the inline event dictionary to free up memory
+                    _inlineEventsNotCatchedUpYet.TryRemove(martenEvent.Id, out var _);
+                }
+                else
+                {
+                    // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
+                    _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+                }
+
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
 
@@ -196,13 +219,24 @@ namespace OpenFTTH.EventSourcing.Postgres
             await foreach (var martenEvent in events)
             {
                 eventsProcessed++;
-                await _projectionRepository.ApplyEventAsync(
-                    new EventEnvelope(
-                        martenEvent.StreamId,
-                        martenEvent.Id,
-                        martenEvent.Version,
-                        martenEvent.Sequence,
-                        martenEvent.Data)).ConfigureAwait(false);
+
+                if (_inlineEventsNotCatchedUpYet.ContainsKey(martenEvent.Id))
+                {
+                    // Do nothing but remove the event id from the inline event dictionary to free up memory
+                    _inlineEventsNotCatchedUpYet.TryRemove(martenEvent.Id, out var _);
+                }
+                else
+                {
+                    // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
+                    await _projectionRepository.ApplyEventAsync(
+                                  new EventEnvelope(
+                                      martenEvent.StreamId,
+                                      martenEvent.Id,
+                                      martenEvent.Version,
+                                      martenEvent.Sequence,
+                                      martenEvent.Data)).ConfigureAwait(false);
+                }
+
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
 

@@ -190,6 +190,55 @@ namespace OpenFTTH.EventSourcing.Tests
             seq2val = eventStore.Sequences.GetNextVal("seq2");
             seq1val.Should().Be(2);
             seq2val.Should().Be(2);
+        }
+
+        [Fact]
+        public void TestCatchup()
+        {
+            if (_connectionString == null)
+                return;
+
+            var eventStore = new PostgresEventStore(null, _connectionString, "TestProjection", true) as IEventStore;
+
+            var poopProjection = new PoopProjection();
+
+            eventStore.Projections.Add(poopProjection);
+
+            var snoopyId = Guid.NewGuid();
+
+            var snoopy = new DogAggregate(snoopyId, "Snoopy");
+            snoopy.Poop(100);
+            snoopy.Poop(100);
+            snoopy.Poop(100);
+            eventStore.Aggregates.Store(snoopy);
+
+            ((PostgresEventStore)eventStore).NumberOfInlineEventsNotCatchedUp.Should().Be(4);
+
+            poopProjection.PoopReport.First().PoopTotal.Should().Be(300);
+
+            // Open new event store and dehydrate events
+            var eventStore2 = new PostgresEventStore(null, _connectionString, "TestProjection", false) as IEventStore;
+            var poopProjection2 = new PoopProjection();
+
+            eventStore2.Projections.Add(poopProjection2);
+
+            eventStore2.DehydrateProjections();
+
+            ((PostgresEventStore)eventStore2).NumberOfInlineEventsNotCatchedUp.Should().Be(0);
+
+            poopProjection2.PoopReport.Count.Should().Be(1);
+
+            var snoopy2 = eventStore.Aggregates.Load<DogAggregate>(snoopyId);
+            snoopy2.Poop(100);
+            eventStore2.Aggregates.Store(snoopy2);
+            poopProjection2.PoopReport.First().PoopTotal.Should().Be(400);
+
+            ((PostgresEventStore)eventStore2).NumberOfInlineEventsNotCatchedUp.Should().Be(1);
+
+            // Check that after catchup the projection is still the same and inline event list is cleaned up
+            eventStore2.CatchUp();
+            poopProjection2.PoopReport.First().PoopTotal.Should().Be(400);
+            ((PostgresEventStore)eventStore2).NumberOfInlineEventsNotCatchedUp.Should().Be(0);
 
         }
     }
