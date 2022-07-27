@@ -72,22 +72,25 @@ namespace OpenFTTH.EventSourcing.InMem
 
         public void DehydrateProjections()
         {
-            throw new NotImplementedException();
+            // Do nothing for in memory
         }
 
         public long CatchUp()
         {
-            throw new NotImplementedException();
+            // Do nothing for in memory
+            return 0;
         }
 
         public Task DehydrateProjectionsAsync()
         {
-            throw new NotImplementedException();
+            // Do nothing for in memory
+            return Task.CompletedTask;
         }
 
-        public Task<long> CatchUpAsync()
+        public async Task<long> CatchUpAsync()
         {
-            throw new NotImplementedException();
+            // Do nothing for in memory
+            return await Task.FromResult(0);
         }
     }
 }
