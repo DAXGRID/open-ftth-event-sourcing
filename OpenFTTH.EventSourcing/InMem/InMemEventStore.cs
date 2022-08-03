@@ -51,6 +51,30 @@ namespace OpenFTTH.EventSourcing.InMem
             _projectionRepository.ApplyEvents(eventEnvelopes);
         }
 
+        public void AppendStream(IReadOnlyList<AggregateBase> aggregates)
+        {
+            foreach (var aggregate in aggregates)
+            {
+                var eventEnvelopes = new List<IEventEnvelope>();
+                var version = aggregate.Version;
+                foreach (var @event in aggregate.GetUncommittedEvents())
+                {
+                    version++;
+                    eventEnvelopes.Add(
+                        new EventEnvelope(
+                            aggregate.Id,
+                            Guid.Empty,
+                            version,
+                            0,
+                            @event));
+                }
+
+                AddEventsToStore(aggregate.Id, eventEnvelopes);
+
+                _projectionRepository.ApplyEvents(eventEnvelopes);
+            }
+        }
+
         private void AddEventsToStore(Guid streamId, List<IEventEnvelope> events)
         {
             var stream = _events.GetOrAdd(streamId, new AppendOnlyList<IEventEnvelope>());

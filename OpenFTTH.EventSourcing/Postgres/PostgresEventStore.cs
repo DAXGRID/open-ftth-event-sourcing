@@ -61,19 +61,6 @@ namespace OpenFTTH.EventSourcing.Postgres
             _sequences = new PostgresSequenceStore(connectionString, databaseSchemaName);
         }
 
-        public void Store(AggregateBase aggregate)
-        {
-            using (var session = _store.OpenSession())
-            {
-                // Take non-persisted events, push them to the event stream, indexed by the aggregate ID
-                var events = aggregate.GetUncommittedEvents().ToArray();
-                session.Events.Append(aggregate.Id, aggregate.Version, events);
-                session.SaveChanges();
-            }
-            // Once succesfully persisted, clear events from list of uncommitted events
-            aggregate.ClearUncommittedEvents();
-        }
-
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
 
         public T Load<T>(Guid id, int? version = null) where T : AggregateBase
@@ -118,6 +105,26 @@ namespace OpenFTTH.EventSourcing.Postgres
             foreach (var e in action.Events)
             {
                 _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+            }
+
+            session.SaveChanges();
+        }
+
+        public void AppendStream(IReadOnlyList<AggregateBase> aggregates)
+        {
+            using var session = _store.LightweightSession();
+
+            foreach (var aggregate in aggregates)
+            {
+                var action = session.Events.Append(
+                    aggregate.Id,
+                    aggregate.Version,
+                    aggregate.GetUncommittedEvents());
+
+                foreach (var e in action.Events)
+                {
+                    _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+                }
             }
 
             session.SaveChanges();
