@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
@@ -21,6 +22,16 @@ namespace OpenFTTH.EventSourcing
 
             // Once succesfully persisted, clear events from list of uncommitted events
             aggregate.ClearUncommittedEvents();
+        }
+
+        public void StoreMany(IReadOnlyList<AggregateBase> aggregates)
+        {
+            store.AppendStream(aggregates);
+            foreach (var aggregate in aggregates)
+            {
+                // Once succesfully persisted, clear events from list of uncommitted events
+                aggregate.ClearUncommittedEvents();
+            }
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
