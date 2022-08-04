@@ -110,6 +110,20 @@ namespace OpenFTTH.EventSourcing.Postgres
             session.SaveChanges();
         }
 
+        public async Task AppendStreamAsync(Guid streamId, int expectedVersion, object[] events)
+        {
+            await using var session = _store.LightweightSession();
+            var action = session.Events.Append(streamId, expectedVersion, events);
+
+            // Add event ids to inline event dictionary used to prevent events to be applied to projections again when catchup is called to retrieve events produced by other services
+            foreach (var e in action.Events)
+            {
+                _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+            }
+
+            await session.SaveChangesAsync().ConfigureAwait(false);
+        }
+
         public void AppendStream(IReadOnlyList<AggregateBase> aggregates)
         {
             using var session = _store.LightweightSession();
@@ -128,6 +142,26 @@ namespace OpenFTTH.EventSourcing.Postgres
             }
 
             session.SaveChanges();
+        }
+
+        public async Task AppendStreamAsync(IReadOnlyList<AggregateBase> aggregates)
+        {
+            await using var session = _store.LightweightSession();
+
+            foreach (var aggregate in aggregates)
+            {
+                var action = session.Events.Append(
+                    aggregate.Id,
+                    aggregate.Version,
+                    aggregate.GetUncommittedEvents());
+
+                foreach (var e in action.Events)
+                {
+                    _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+                }
+            }
+
+            await session.SaveChangesAsync().ConfigureAwait(false);
         }
 
         public object[] FetchStream(Guid streamId, int version = 0)

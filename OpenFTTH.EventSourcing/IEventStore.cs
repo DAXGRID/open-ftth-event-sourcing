@@ -7,7 +7,9 @@ namespace OpenFTTH.EventSourcing
     public interface IEventStore
     {
         void AppendStream(Guid streamId, int expectedVersion, object[] events);
+        Task AppendStreamAsync(Guid streamId, int expectedVersion, object[] events);
         void AppendStream(IReadOnlyList<AggregateBase> aggregate);
+        Task AppendStreamAsync(IReadOnlyList<AggregateBase> aggregate);
         object[] FetchStream(Guid streamId, int version = 0);
         IProjectionRepository Projections { get; }
         IAggregateRepository Aggregates { get; }
