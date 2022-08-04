@@ -51,6 +51,13 @@ namespace OpenFTTH.EventSourcing.InMem
             _projectionRepository.ApplyEvents(eventEnvelopes);
         }
 
+        public Task AppendStreamAsync(Guid streamId, int expectedVersion, object[] events)
+        {
+            // No async implementation just call default implementation.
+            AppendStream(streamId, expectedVersion, events);
+            return Task.CompletedTask;
+        }
+
         public void AppendStream(IReadOnlyList<AggregateBase> aggregates)
         {
             foreach (var aggregate in aggregates)
@@ -75,10 +82,16 @@ namespace OpenFTTH.EventSourcing.InMem
             }
         }
 
+        public Task AppendStreamAsync(IReadOnlyList<AggregateBase> aggregates)
+        {
+            // No async implementation just call default implementation.
+            AppendStream(aggregates);
+            return Task.CompletedTask;
+        }
+
         private void AddEventsToStore(Guid streamId, List<IEventEnvelope> events)
         {
             var stream = _events.GetOrAdd(streamId, new AppendOnlyList<IEventEnvelope>());
-
             stream.AppendRange(events);
         }
 

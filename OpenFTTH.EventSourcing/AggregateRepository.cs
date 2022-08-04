@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing
 {
@@ -24,9 +25,30 @@ namespace OpenFTTH.EventSourcing
             aggregate.ClearUncommittedEvents();
         }
 
+        public async Task StoreAsync(AggregateBase aggregate)
+        {
+            // Take non-persisted events and write them to the event store
+            var events = aggregate.GetUncommittedEvents().ToArray();
+            await store.AppendStreamAsync(aggregate.Id, aggregate.Version, events)
+                .ConfigureAwait(false);
+
+            // Once succesfully persisted, clear events from list of uncommitted events
+            aggregate.ClearUncommittedEvents();
+        }
+
         public void StoreMany(IReadOnlyList<AggregateBase> aggregates)
         {
             store.AppendStream(aggregates);
+            foreach (var aggregate in aggregates)
+            {
+                // Once succesfully persisted, clear events from list of uncommitted events
+                aggregate.ClearUncommittedEvents();
+            }
+        }
+
+        public async Task StoreManyAsync(IReadOnlyList<AggregateBase> aggregates)
+        {
+            await store.AppendStreamAsync(aggregates).ConfigureAwait(false);
             foreach (var aggregate in aggregates)
             {
                 // Once succesfully persisted, clear events from list of uncommitted events
