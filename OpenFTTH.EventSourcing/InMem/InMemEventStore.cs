@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing.InMem
@@ -118,16 +119,16 @@ namespace OpenFTTH.EventSourcing.InMem
             return 0;
         }
 
-        public Task DehydrateProjectionsAsync()
+        public Task DehydrateProjectionsAsync(CancellationToken cancellationToken = default)
         {
             // Do nothing for in memory
             return Task.CompletedTask;
         }
 
-        public async Task<long> CatchUpAsync()
+        public async Task<long> CatchUpAsync(CancellationToken cancellationToken = default)
         {
             // Do nothing for in memory
-            return await Task.FromResult(0);
+            return await Task.FromResult(0).ConfigureAwait(false);
         }
     }
 }

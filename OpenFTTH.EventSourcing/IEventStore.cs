@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OpenFTTH.EventSourcing
@@ -16,8 +17,8 @@ namespace OpenFTTH.EventSourcing
         ICommandLog CommandLog { get; }
         ISequences Sequences { get; }
         void DehydrateProjections();
-        Task DehydrateProjectionsAsync();
+        Task DehydrateProjectionsAsync(CancellationToken cancellationToken = default);
         long CatchUp();
-        Task<long> CatchUpAsync();
+        Task<long> CatchUpAsync(CancellationToken cancellationToken = default);
     }
 }
