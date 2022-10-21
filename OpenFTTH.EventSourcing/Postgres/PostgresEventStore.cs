@@ -1,5 +1,6 @@
 ﻿using Marten;
 using Marten.Events;
+using Npgsql;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -32,6 +33,7 @@ namespace OpenFTTH.EventSourcing.Postgres
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
 
+        private readonly string _connectionString;
 
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
@@ -59,6 +61,8 @@ namespace OpenFTTH.EventSourcing.Postgres
             _commandLog = new PostgresCommandLog(_store);
 
             _sequences = new PostgresSequenceStore(connectionString, databaseSchemaName);
+
+            _connectionString = connectionString;
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -220,12 +224,20 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public long CatchUp()
         {
+            var newestSequenceNumber = GetNewestSequenceNumber();
+            if (newestSequenceNumber == _lastSequenceNumberProcessed)
+            {
+                return 0;
+            }
+
             using var session = _store.LightweightSession();
 
             long eventsProcessed = 0;
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed &&
+                       e.Sequence <= newestSequenceNumber &&
+                       e.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -242,26 +254,34 @@ namespace OpenFTTH.EventSourcing.Postgres
                     // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
                     _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
                 }
-
-                _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
+
+            _lastSequenceNumberProcessed = newestSequenceNumber;
 
             return eventsProcessed;
         }
 
         public async Task<long> CatchUpAsync(CancellationToken cancellationToken = default)
         {
+            var newestSequenceNumber = GetNewestSequenceNumber();
+            if (newestSequenceNumber == _lastSequenceNumberProcessed)
+            {
+                return 0;
+            }
+
             await using var session = _store.LightweightSession();
 
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed &&
+                       e.Sequence <= newestSequenceNumber &&
+                       e.DotNetTypeName.IsOneOf(eventTypes))
                 .OrderBy(e => e.Sequence)
                 .ToAsyncEnumerable(cancellationToken)
                 .ConfigureAwait(false);
 
             long eventsProcessed = 0;
-
+           
             await foreach (var martenEvent in events)
             {
                 eventsProcessed++;
@@ -284,9 +304,9 @@ namespace OpenFTTH.EventSourcing.Postgres
                                 martenEvent.Data))
                         .ConfigureAwait(false);
                 }
-
-                _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
+
+            _lastSequenceNumberProcessed = newestSequenceNumber;
 
             return eventsProcessed;
         }
@@ -298,6 +318,23 @@ namespace OpenFTTH.EventSourcing.Postgres
             .Select(x => $"{x.FullName}, {x.Assembly.GetName().Name}")
             .Distinct() // We Distinct to remove all duplicates
             .ToList();
+
+        private int GetNewestSequenceNumber()
+        {
+            const string sql = "SELECT MAX(seq_id) FROM events.mt_events";
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(sql, conn);
+
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+
+            if (result is null)
+            {
+                throw new InvalidOperationException("Could not receive newest sequence number.");
+            }
+
+            return (int)result;
+        }
 
         public class Projection : Marten.Events.Projections.IProjection
         {
