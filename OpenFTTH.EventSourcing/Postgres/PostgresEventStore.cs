@@ -281,7 +281,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                 .ConfigureAwait(false);
 
             long eventsProcessed = 0;
-           
+
             await foreach (var martenEvent in events)
             {
                 eventsProcessed++;
@@ -319,7 +319,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             .Distinct() // We Distinct to remove all duplicates
             .ToList();
 
-        private int GetNewestSequenceNumber()
+        private long GetNewestSequenceNumber()
         {
             const string sql = "SELECT MAX(seq_id) FROM events.mt_events";
             using var conn = new NpgsqlConnection(_connectionString);
@@ -333,7 +333,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                 throw new InvalidOperationException("Could not receive newest sequence number.");
             }
 
-            return (int)result;
+            return (long)result;
         }
 
         public class Projection : Marten.Events.Projections.IProjection
