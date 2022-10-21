@@ -225,7 +225,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             long eventsProcessed = 0;
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed)
                 .OrderBy(e => e.Sequence);
 
             foreach (var martenEvent in events)
@@ -255,7 +255,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
             var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed && e.DotNetTypeName.IsOneOf(eventTypes))
+                .Where(e => e.Sequence > _lastSequenceNumberProcessed)
                 .OrderBy(e => e.Sequence)
                 .ToAsyncEnumerable(cancellationToken)
                 .ConfigureAwait(false);
