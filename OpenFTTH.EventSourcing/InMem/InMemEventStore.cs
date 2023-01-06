@@ -35,7 +35,7 @@ namespace OpenFTTH.EventSourcing.InMem
             _sequences = new InMemSequenceStore();
         }
 
-        public void AppendStream(Guid streamId, int expectedVersion, object[] events)
+        public void AppendStream(Guid streamId, long expectedVersion, object[] events)
         {
             List<IEventEnvelope> eventEnvelopes = new List<IEventEnvelope>();
 
@@ -52,7 +52,7 @@ namespace OpenFTTH.EventSourcing.InMem
             _projectionRepository.ApplyEvents(eventEnvelopes);
         }
 
-        public Task AppendStreamAsync(Guid streamId, int expectedVersion, object[] events)
+        public Task AppendStreamAsync(Guid streamId, long expectedVersion, object[] events)
         {
             // No async implementation just call default implementation.
             AppendStream(streamId, expectedVersion, events);
@@ -96,7 +96,7 @@ namespace OpenFTTH.EventSourcing.InMem
             stream.AppendRange(events);
         }
 
-        public object[] FetchStream(Guid streamId, int version = 0)
+        public object[] FetchStream(Guid streamId, long version = 0)
         {
             if (!_events.ContainsKey(streamId))
             {
