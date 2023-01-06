@@ -2,6 +2,7 @@ using FluentAssertions;
 using OpenFTTH.EventSourcing.InMem;
 using OpenFTTH.EventSourcing.Tests.Model;
 using System;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace OpenFTTH.EventSourcing.Tests
@@ -37,7 +38,6 @@ namespace OpenFTTH.EventSourcing.Tests
             dehydratedAggregate.Should().BeEquivalentTo(aggregateBeforeHydration);
         }
 
-
         [Fact]
         public void TestProjection()
         {
@@ -69,10 +69,36 @@ namespace OpenFTTH.EventSourcing.Tests
             var eventStore = new InMemEventStore(null) as IEventStore;
 
             Guid newDogId = Guid.NewGuid();
-  
+
             var newDog = eventStore.Aggregates.Load<DogAggregate>(newDogId);
 
             newDog.Version.Should().Be(0);
+        }
+
+        [Fact]
+        public void TestCurrentStreamVersion_ShouldReturnLatestVesion()
+        {
+            var eventStore = new InMemEventStore(null) as IEventStore;
+
+            var streamId = Guid.NewGuid();
+            var eventsToSave = new object[] { new DogBorn("Snoopy"), new DogBorn("Pluto") };
+            eventStore.AppendStream(streamId, 0, eventsToSave);
+
+            var version = eventStore.CurrentStreamVersion(streamId);
+            version.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task TestCurrentStreamVersionAsync_ShouldReturnLatestVesion()
+        {
+            var eventStore = new InMemEventStore(null) as IEventStore;
+
+            var streamId = Guid.NewGuid();
+            var eventsToSave = new object[] { new DogBorn("Snoopy"), new DogBorn("Pluto") };
+            eventStore.AppendStream(streamId, 0, eventsToSave);
+
+            var version = await eventStore.CurrentStreamVersionAsync(streamId);
+            version.Should().Be(1);
         }
     }
 }
