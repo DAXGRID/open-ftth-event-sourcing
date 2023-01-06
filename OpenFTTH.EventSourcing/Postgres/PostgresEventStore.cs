@@ -67,7 +67,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        public T Load<T>(Guid id, int? version = null) where T : AggregateBase
+        public T Load<T>(Guid id, long? version = null) where T : AggregateBase
         {
             IReadOnlyList<IEvent> events;
             using (var session = _store.LightweightSession())
@@ -100,7 +100,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                 return true;
         }
 
-        public void AppendStream(Guid streamId, int expectedVersion, object[] events)
+        public void AppendStream(Guid streamId, long expectedVersion, object[] events)
         {
             using var session = _store.LightweightSession();
             var action = session.Events.Append(streamId, expectedVersion, events);
@@ -114,7 +114,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             session.SaveChanges();
         }
 
-        public async Task AppendStreamAsync(Guid streamId, int expectedVersion, object[] events)
+        public async Task AppendStreamAsync(Guid streamId, long expectedVersion, object[] events)
         {
             await using var session = _store.LightweightSession();
             var action = session.Events.Append(streamId, expectedVersion, events);
@@ -168,7 +168,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             await session.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        public object[] FetchStream(Guid streamId, int version = 0)
+        public object[] FetchStream(Guid streamId, long version = 0)
         {
             using var session = _store.LightweightSession();
             return session.Events.FetchStream(streamId, version).Select(e => e.Data).ToArray();
