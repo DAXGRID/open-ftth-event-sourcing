@@ -379,5 +379,20 @@ namespace OpenFTTH.EventSourcing.Postgres
                 }
             }
         }
+
+        public long CurrentStreamVersion(Guid streamId)
+        {
+            using var session = _store.LightweightSession();
+            return session.Events
+                .FetchStreamState(streamId).Version;
+        }
+
+        public async Task<long> CurrentStreamVersionAsync(Guid streamId)
+        {
+            await using var session = _store.LightweightSession();
+            return (await session.Events
+                    .FetchStreamStateAsync(streamId)
+                    .ConfigureAwait(false)).Version;
+        }
     }
 }
