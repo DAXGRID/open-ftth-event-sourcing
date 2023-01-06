@@ -88,16 +88,10 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public bool CheckIfAggregateIdHasBeenUsed(Guid id)
         {
-            IReadOnlyList<IEvent> events;
-            using (var session = _store.LightweightSession())
-            {
-                events = session.Events.FetchStream(id);
-            }
+            using var session = _store.LightweightSession();
+            var events = session.Events.FetchStream(id);
 
-            if (events == null || (!events.Any()))
-                return false;
-            else
-                return true;
+            return events is not null && events.Any();
         }
 
         public void AppendStream(Guid streamId, long expectedVersion, object[] events)
