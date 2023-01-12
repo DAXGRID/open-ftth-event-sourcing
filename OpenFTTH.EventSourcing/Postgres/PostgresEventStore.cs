@@ -374,19 +374,30 @@ namespace OpenFTTH.EventSourcing.Postgres
             }
         }
 
-        public long CurrentStreamVersion(Guid streamId)
+        public long? CurrentStreamVersion(Guid streamId)
         {
-            using var session = _store.LightweightSession();
-            return session.Events
-                .FetchStreamState(streamId).Version;
+            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("id", streamId);
+
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+
+            return (long?)result;
         }
 
-        public async Task<long> CurrentStreamVersionAsync(Guid streamId)
+        public async Task<long?> CurrentStreamVersionAsync(Guid streamId)
         {
-            await using var session = _store.LightweightSession();
-            return (await session.Events
-                    .FetchStreamStateAsync(streamId)
-                    .ConfigureAwait(false)).Version;
+            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("id", streamId);
+
+            await conn.OpenAsync().ConfigureAwait(false);
+            var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
+
+            return (long?)result;
         }
     }
 }
