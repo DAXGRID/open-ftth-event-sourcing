@@ -131,16 +131,16 @@ namespace OpenFTTH.EventSourcing.InMem
             return await Task.FromResult(0).ConfigureAwait(false);
         }
 
-        public long CurrentStreamVersion(Guid streamId)
+        public long? CurrentStreamVersion(Guid streamId)
         {
             // We -1 because we start at version 0.
             return (long)_events[streamId].Count() - 1;
         }
 
-        public Task<long> CurrentStreamVersionAsync(Guid streamId)
+        public Task<long?> CurrentStreamVersionAsync(Guid streamId)
         {
             // We -1 because we start at version 0.
-            return Task.FromResult((long)_events[streamId].Count() - 1);
+            return Task.FromResult((long?)_events[streamId].Count() - 1);
         }
     }
 }
