@@ -218,7 +218,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public long CatchUp()
         {
-            var newestSequenceNumber = GetNewestSequenceNumber();
+            var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
             if (newestSequenceNumber == _lastSequenceNumberProcessed)
             {
                 return 0;
@@ -250,14 +250,14 @@ namespace OpenFTTH.EventSourcing.Postgres
                 }
             }
 
-            _lastSequenceNumberProcessed = newestSequenceNumber ?? 0;
+            _lastSequenceNumberProcessed = newestSequenceNumber;
 
             return eventsProcessed;
         }
 
         public async Task<long> CatchUpAsync(CancellationToken cancellationToken = default)
         {
-            var newestSequenceNumber = GetNewestSequenceNumber();
+            var newestSequenceNumber = GetNewestSequenceNumber() ?? 0;
             if (newestSequenceNumber == _lastSequenceNumberProcessed)
             {
                 return 0;
@@ -300,7 +300,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                 }
             }
 
-            _lastSequenceNumberProcessed = newestSequenceNumber ?? 0;
+            _lastSequenceNumberProcessed = newestSequenceNumber;
 
             return eventsProcessed;
         }
