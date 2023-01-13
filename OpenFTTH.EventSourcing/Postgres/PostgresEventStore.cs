@@ -322,7 +322,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             conn.Open();
             var result = cmd.ExecuteScalar();
 
-            return (long?)result;
+            return (result is not null && result is not DBNull) ? (long)result : null;
         }
 
         public class Projection : Marten.Events.Projections.IProjection
