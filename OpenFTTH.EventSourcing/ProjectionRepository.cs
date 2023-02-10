@@ -11,11 +11,11 @@ namespace OpenFTTH.EventSourcing
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ConcurrentBag<IProjection> _projections = new ConcurrentBag<IProjection>();
+        private bool _projectionsHasBeScanned = false;
 
         public ProjectionRepository(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
-            ScanServiceProviderForProjections();
         }
 
         public void Add(IProjection projection)
@@ -28,6 +28,8 @@ namespace OpenFTTH.EventSourcing
 
         internal void ApplyEvents(IReadOnlyList<IEventEnvelope> events)
         {
+            ScanServiceProviderForProjections();
+
             foreach (var projection in _projections)
             {
                 projection.Apply(events);
@@ -36,6 +38,8 @@ namespace OpenFTTH.EventSourcing
 
         internal async Task ApplyEventsAsync(IReadOnlyList<IEventEnvelope> events)
         {
+            ScanServiceProviderForProjections();
+
             foreach (var projection in _projections)
             {
                 await projection.ApplyAsync(events).ConfigureAwait(false);
@@ -60,7 +64,7 @@ namespace OpenFTTH.EventSourcing
 
         private void ScanServiceProviderForProjections()
         {
-            if (_serviceProvider != null)
+            if (!_projectionsHasBeScanned && _serviceProvider != null)
             {
                 var projections = _serviceProvider.GetServices<IProjection>();
 
@@ -73,10 +77,14 @@ namespace OpenFTTH.EventSourcing
                     }
                 }
             }
+
+            _projectionsHasBeScanned = true;
         }
 
         public T Get<T>()
         {
+            ScanServiceProviderForProjections();
+
             foreach (var projection in _projections)
             {
                 if (projection is T)

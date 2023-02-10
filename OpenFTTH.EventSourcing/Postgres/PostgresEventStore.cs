@@ -315,7 +315,8 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private long? GetNewestSequenceNumber()
         {
-            const string sql = "SELECT MAX(seq_id) FROM events.mt_events";
+            
+            string sql = $"SELECT MAX(seq_id) FROM {_store.Options.DatabaseSchemaName}.mt_events";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
 
