@@ -142,5 +142,10 @@ namespace OpenFTTH.EventSourcing.InMem
             // We -1 because we start at version 0.
             return Task.FromResult((long?)_events[streamId].Count() - 1);
         }
+
+        public void ScanForProjections()
+        {
+            _projectionRepository.ScanServiceProviderForProjections();
+        }
     }
 }

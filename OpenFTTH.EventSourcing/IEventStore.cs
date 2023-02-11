@@ -22,5 +22,6 @@ namespace OpenFTTH.EventSourcing
         Task<long> CatchUpAsync(CancellationToken cancellationToken = default);
         long? CurrentStreamVersion(Guid streamId);
         Task<long?> CurrentStreamVersionAsync(Guid streamId);
+        void ScanForProjections();
     }
 }

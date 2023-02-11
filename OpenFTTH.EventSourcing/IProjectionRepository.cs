@@ -4,5 +4,6 @@
     {
         void Add(IProjection projection);
         T Get<T>();
+        void ScanServiceProviderForProjections();
     }
 }

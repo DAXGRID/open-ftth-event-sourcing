@@ -315,7 +315,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         private long? GetNewestSequenceNumber()
         {
-            
+
             string sql = $"SELECT MAX(seq_id) FROM {_store.Options.DatabaseSchemaName}.mt_events";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
@@ -394,6 +394,11 @@ namespace OpenFTTH.EventSourcing.Postgres
             var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
 
             return (long?)result;
+        }
+
+        public void ScanForProjections()
+        {
+            _projectionRepository.ScanServiceProviderForProjections();
         }
     }
 }
