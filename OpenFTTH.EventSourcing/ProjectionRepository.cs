@@ -48,6 +48,8 @@ namespace OpenFTTH.EventSourcing
 
         internal void ApplyEvent(IEventEnvelope @event)
         {
+            ScanServiceProviderForProjections();
+
             foreach (var projection in _projections)
             {
                 projection.Apply(@event);
@@ -56,6 +58,8 @@ namespace OpenFTTH.EventSourcing
 
         internal async Task ApplyEventAsync(IEventEnvelope @event)
         {
+            ScanServiceProviderForProjections();
+
             foreach (var projection in _projections)
             {
                 await projection.ApplyAsync(@event).ConfigureAwait(false);
