@@ -12,19 +12,23 @@ namespace OpenFTTH.EventSourcing.Tests
         private IServiceProvider _serviceProvider;
         private IEventStore _eventStore;
 
-        public DependencyInjectionTests(IServiceProvider serviceProvider, IEventStore eventStore)
+        public DependencyInjectionTests(
+            IServiceProvider serviceProvider,
+            IEventStore eventStore)
         {
             _serviceProvider = serviceProvider;
-
             _eventStore = eventStore;
         }
 
         [Fact]
-        public void TestThatProjectionAreAutomaticallyPickedUpInIoCByEventStore()
+        public void TestRegistrationOfProjections()
         {
+            _eventStore.ScanForProjections();
 
             // Setup
-            var poopProjection = _serviceProvider.GetServices<IProjection>().First(p => p is PoopProjection) as PoopProjection;
+            var poopProjection = _serviceProvider
+                .GetServices<IProjection>()
+                .First(p => p is PoopProjection) as PoopProjection;
 
             // Act
             var snoopy = new DogAggregate(Guid.NewGuid(), "Snoopy");
@@ -32,7 +36,10 @@ namespace OpenFTTH.EventSourcing.Tests
             _eventStore.Aggregates.Store(snoopy);
 
             // Assert
-            poopProjection.PoopReport.Find(d => d.DogName == "Snoopy").PoopTotal.Should().Be(200);
+            poopProjection.PoopReport
+                .Find(d => d.DogName == "Snoopy")
+                .PoopTotal
+                .Should().Be(200);
         }
 
         [Fact]
