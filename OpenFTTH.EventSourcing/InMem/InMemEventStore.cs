@@ -44,7 +44,7 @@ namespace OpenFTTH.EventSourcing.InMem
             foreach (var @event in events)
             {
                 version++;
-                eventEnvelopes.Add(new EventEnvelope(streamId, Guid.Empty, version, 0, @event));
+                eventEnvelopes.Add(new EventEnvelope(streamId, Guid.Empty, version, 0, DateTime.UtcNow, @event));
             }
 
             AddEventsToStore(streamId, eventEnvelopes);
@@ -74,6 +74,7 @@ namespace OpenFTTH.EventSourcing.InMem
                             Guid.Empty,
                             version,
                             0,
+                            DateTime.UtcNow,
                             @event));
                 }
 
