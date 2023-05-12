@@ -176,7 +176,14 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             foreach (var martenEvent in events)
             {
-                _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+                _projectionRepository.ApplyEvent(
+                    new EventEnvelope(
+                        martenEvent.StreamId,
+                        martenEvent.Id,
+                        martenEvent.Version,
+                        martenEvent.Sequence,
+                        martenEvent.Timestamp.UtcDateTime,
+                        martenEvent.Data));
 
                 _lastSequenceNumberProcessed = martenEvent.Sequence;
             }
@@ -204,6 +211,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                             martenEvent.Id,
                             martenEvent.Version,
                             martenEvent.Sequence,
+                            martenEvent.Timestamp.UtcDateTime,
                             martenEvent.Data))
                     .ConfigureAwait(false);
 
@@ -243,7 +251,14 @@ namespace OpenFTTH.EventSourcing.Postgres
                 else
                 {
                     // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
-                    _projectionRepository.ApplyEvent(new EventEnvelope(martenEvent.StreamId, martenEvent.Id, martenEvent.Version, martenEvent.Sequence, martenEvent.Data));
+                    _projectionRepository.ApplyEvent(
+                        new EventEnvelope(
+                            martenEvent.StreamId,
+                            martenEvent.Id,
+                            martenEvent.Version,
+                            martenEvent.Sequence,
+                            martenEvent.Timestamp.UtcDateTime,
+                            martenEvent.Data));
                 }
             }
 
@@ -292,6 +307,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                                 martenEvent.Id,
                                 martenEvent.Version,
                                 martenEvent.Sequence,
+                                martenEvent.Timestamp.UtcDateTime,
                                 martenEvent.Data))
                         .ConfigureAwait(false);
                 }
@@ -336,7 +352,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             {
                 foreach (var stream in streams)
                 {
-                    var events = stream.Events.Select(e => new EventEnvelope(stream.Id, e.Id, e.Version, e.Sequence, e.Data)).ToList().AsReadOnly();
+                    var events = stream.Events.Select(e => new EventEnvelope(stream.Id, e.Id, e.Version, e.Sequence, e.Timestamp.UtcDateTime, e.Data)).ToList().AsReadOnly();
                     _projectionRepository.ApplyEvents(events);
                 }
             }
@@ -356,6 +372,7 @@ namespace OpenFTTH.EventSourcing.Postgres
                                 e.Id,
                                 e.Version,
                                 e.Sequence,
+                                e.Timestamp.UtcDateTime,
                                 e.Data))
                         .ToList()
                         .AsReadOnly();
