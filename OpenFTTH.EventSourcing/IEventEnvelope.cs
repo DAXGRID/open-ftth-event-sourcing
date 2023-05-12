@@ -8,6 +8,7 @@ namespace OpenFTTH.EventSourcing
         public Guid EventId { get; }
         public long Version { get; }
         public long GlobalVersion { get; }
-        object Data { get; }
+        public DateTime EventTimestamp { get; }
+        public object Data { get; }
     }
 }
