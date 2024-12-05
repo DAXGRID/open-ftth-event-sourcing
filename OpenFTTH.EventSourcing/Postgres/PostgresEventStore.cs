@@ -1,5 +1,6 @@
 ﻿using Marten;
 using Marten.Events;
+using Newtonsoft.Json;
 using Npgsql;
 using System;
 using System.Collections.Concurrent;
@@ -167,25 +168,50 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public void DehydrateProjections()
         {
-            using var session = _store.LightweightSession();
+            var eventTypesInClause = String.Join(
+                ", ",
+                GetMartenDotNetTypeFormat(_projectionRepository.GetAll()).Select(x => $"'{x}'")
+            );
 
-            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
-            var events = session.Events.QueryAllRawEvents()
-                .Where(x => x.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence);
+            var QUERY_EVENTS = $@"
+SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+FROM events.mt_events
+WHERE mt_dotnet_type IN ({eventTypesInClause})
+ORDER BY seq_id asc";
 
-            foreach (var martenEvent in events)
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(QUERY_EVENTS, conn);
+            using var reader = cmd.ExecuteReader();
+
+            var types = new Dictionary<string, Type>();
+
+            while (reader.Read())
             {
-                _projectionRepository.ApplyEvent(
-                    new EventEnvelope(
-                        martenEvent.StreamId,
-                        martenEvent.Id,
-                        martenEvent.Version,
-                        martenEvent.Sequence,
-                        martenEvent.Timestamp.UtcDateTime,
-                        martenEvent.Data));
+                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
+                var typeName = splittedDotnetType[0];
+                var assemblyName = splittedDotnetType[1];
 
-                _lastSequenceNumberProcessed = martenEvent.Sequence;
+                if (!types.ContainsKey(typeName))
+                {
+                    var assembly = Assembly.Load(assemblyName);
+                    var type = assembly.GetType(typeName);
+                    types.Add(typeName, type);
+                }
+
+                var sequenceId = Convert.ToInt64(reader["seq_id"]);
+
+                var eventEnvelope = new EventEnvelope (
+                    Guid.Parse(Convert.ToString(reader["stream_id"])),
+                    Guid.Parse(Convert.ToString(reader["id"])),
+                    Convert.ToInt32(reader["version"]),
+                    sequenceId,
+                    DateTime.Parse(Convert.ToString(reader["timestamp"])).ToUniversalTime(),
+                    JsonConvert.DeserializeObject((string)reader["data"], types[typeName])
+                );
+
+                _lastSequenceNumberProcessed = sequenceId;
+
+                _projectionRepository.ApplyEvent(eventEnvelope);
             }
 
             _projectionRepository.DehydrationFinish();
@@ -193,29 +219,50 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public async Task DehydrateProjectionsAsync(CancellationToken cancellationToken = default)
         {
-            await using var session = _store.LightweightSession();
+            var eventTypesInClause = String.Join(
+                ", ",
+                GetMartenDotNetTypeFormat(_projectionRepository.GetAll()).Select(x => $"'{x}'")
+            );
 
-            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
-            var events = session.Events.QueryAllRawEvents()
-                .Where(x => x.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence)
-                .ToAsyncEnumerable(cancellationToken)
-                .ConfigureAwait(false);
+            var QUERY_EVENTS = $@"
+SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+FROM events.mt_events
+WHERE mt_dotnet_type IN ({eventTypesInClause})
+ORDER BY seq_id asc";
 
-            await foreach (var martenEvent in events)
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(QUERY_EVENTS, conn);
+            using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+
+            var types = new Dictionary<string, Type>();
+
+            while (await reader.ReadAsync().ConfigureAwait(false))
             {
-                await _projectionRepository
-                    .ApplyEventAsync(
-                        new EventEnvelope(
-                            martenEvent.StreamId,
-                            martenEvent.Id,
-                            martenEvent.Version,
-                            martenEvent.Sequence,
-                            martenEvent.Timestamp.UtcDateTime,
-                            martenEvent.Data))
-                    .ConfigureAwait(false);
+                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
+                var typeName = splittedDotnetType[0];
+                var assemblyName = splittedDotnetType[1];
 
-                _lastSequenceNumberProcessed = martenEvent.Sequence;
+                if (!types.ContainsKey(typeName))
+                {
+                    var assembly = Assembly.Load(assemblyName);
+                    var type = assembly.GetType(typeName);
+                    types.Add(typeName, type);
+                }
+
+                var sequenceId = Convert.ToInt64(reader["seq_id"]);
+
+                var eventEnvelope = new EventEnvelope (
+                    Guid.Parse(Convert.ToString(reader["stream_id"])),
+                    Guid.Parse(Convert.ToString(reader["id"])),
+                    Convert.ToInt32(reader["version"]),
+                    sequenceId,
+                    DateTime.Parse(Convert.ToString(reader["timestamp"])).ToUniversalTime(),
+                    JsonConvert.DeserializeObject((string)reader["data"], types[typeName])
+                );
+
+                _lastSequenceNumberProcessed = sequenceId;
+
+                await _projectionRepository.ApplyEventAsync(eventEnvelope).ConfigureAwait(false);
             }
 
             await _projectionRepository.DehydrationFinishAsync().ConfigureAwait(false);
