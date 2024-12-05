@@ -180,6 +180,7 @@ WHERE mt_dotnet_type IN ({eventTypesInClause})
 ORDER BY seq_id asc";
 
             using var conn = new NpgsqlConnection(_connectionString);
+            conn.Open();
             using var cmd = new NpgsqlCommand(QUERY_EVENTS, conn);
             using var reader = cmd.ExecuteReader();
 
@@ -231,6 +232,7 @@ WHERE mt_dotnet_type IN ({eventTypesInClause})
 ORDER BY seq_id asc";
 
             using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync().ConfigureAwait(false);
             using var cmd = new NpgsqlCommand(QUERY_EVENTS, conn);
             using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
 
