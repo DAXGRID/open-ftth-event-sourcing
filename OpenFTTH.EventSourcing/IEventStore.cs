@@ -14,7 +14,6 @@ namespace OpenFTTH.EventSourcing
         object[] FetchStream(Guid streamId, long version = 0);
         IProjectionRepository Projections { get; }
         IAggregateRepository Aggregates { get; }
-        ICommandLog CommandLog { get; }
         ISequences Sequences { get; }
         void DehydrateProjections();
         Task DehydrateProjectionsAsync(CancellationToken cancellationToken = default);
