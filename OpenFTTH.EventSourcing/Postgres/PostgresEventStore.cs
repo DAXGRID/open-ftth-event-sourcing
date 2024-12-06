@@ -278,36 +278,63 @@ ORDER BY seq_id asc";
                 return 0;
             }
 
-            using var session = _store.LightweightSession();
+            var eventTypesInClause = String.Join(
+                ", ",
+                GetMartenDotNetTypeFormat(_projectionRepository.GetAll()).Select(x => $"'{x}'")
+            );
+
+            var CATCH_UP_EVENTS_SQL = $@"
+SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+FROM events.mt_events
+where mt_dotnet_type IN ({eventTypesInClause})
+and seq_id > {_lastSequenceNumberProcessed} and seq_id <= {newestSequenceNumber}
+ORDER BY seq_id asc";
 
             long eventsProcessed = 0;
-            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
-            var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed &&
-                       e.Sequence <= newestSequenceNumber &&
-                       e.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence);
 
-            foreach (var martenEvent in events)
+            using var conn = new NpgsqlConnection(_connectionString);
+            conn.Open();
+            using var cmd = new NpgsqlCommand(CATCH_UP_EVENTS_SQL, conn);
+            using var reader = cmd.ExecuteReader();
+
+            var types = new Dictionary<string, Type>();
+
+            while (reader.Read())
             {
                 eventsProcessed++;
 
-                if (_inlineEventsNotCatchedUpYet.ContainsKey(martenEvent.Id))
+                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
+                var typeName = splittedDotnetType[0];
+                var assemblyName = splittedDotnetType[1];
+
+                if (!types.ContainsKey(typeName))
+                {
+                    var assembly = Assembly.Load(assemblyName);
+                    var type = assembly.GetType(typeName);
+                    types.Add(typeName, type);
+                }
+
+                var sequenceId = Convert.ToInt64(reader["seq_id"]);
+                var eventId = Guid.Parse(Convert.ToString(reader["id"]));
+
+                if (_inlineEventsNotCatchedUpYet.ContainsKey(eventId))
                 {
                     // Do nothing but remove the event id from the inline event dictionary to free up memory
-                    _inlineEventsNotCatchedUpYet.TryRemove(martenEvent.Id, out var _);
+                    _inlineEventsNotCatchedUpYet.TryRemove(eventId, out var _);
                 }
                 else
                 {
+                    var eventEnvelope = new EventEnvelope (
+                        Guid.Parse(Convert.ToString(reader["stream_id"])),
+                        eventId,
+                        Convert.ToInt32(reader["version"]),
+                        sequenceId,
+                        DateTime.Parse(Convert.ToString(reader["timestamp"])).ToUniversalTime(),
+                        JsonConvert.DeserializeObject((string)reader["data"], types[typeName])
+                    );
+
                     // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
-                    _projectionRepository.ApplyEvent(
-                        new EventEnvelope(
-                            martenEvent.StreamId,
-                            martenEvent.Id,
-                            martenEvent.Version,
-                            martenEvent.Sequence,
-                            martenEvent.Timestamp.UtcDateTime,
-                            martenEvent.Data));
+                    _projectionRepository.ApplyEvent(eventEnvelope);
                 }
             }
 
@@ -318,47 +345,69 @@ ORDER BY seq_id asc";
 
         public async Task<long> CatchUpAsync(CancellationToken cancellationToken = default)
         {
-            var newestSequenceNumber = GetNewestSequenceNumber() ?? 0;
+            var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
             if (newestSequenceNumber == _lastSequenceNumberProcessed)
             {
                 return 0;
             }
 
-            await using var session = _store.LightweightSession();
+            var eventTypesInClause = String.Join(
+                ", ",
+                GetMartenDotNetTypeFormat(_projectionRepository.GetAll()).Select(x => $"'{x}'")
+            );
 
-            var eventTypes = GetMartenDotNetTypeFormat(_projectionRepository.GetAll());
-            var events = session.Events.QueryAllRawEvents()
-                .Where(e => e.Sequence > _lastSequenceNumberProcessed &&
-                       e.Sequence <= newestSequenceNumber &&
-                       e.DotNetTypeName.IsOneOf(eventTypes))
-                .OrderBy(e => e.Sequence)
-                .ToAsyncEnumerable(cancellationToken)
-                .ConfigureAwait(false);
+            var CATCH_UP_EVENTS_SQL = $@"
+SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+FROM events.mt_events
+where mt_dotnet_type IN ({eventTypesInClause})
+and seq_id > {_lastSequenceNumberProcessed} and seq_id <= {newestSequenceNumber}
+ORDER BY seq_id asc";
 
             long eventsProcessed = 0;
 
-            await foreach (var martenEvent in events)
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync().ConfigureAwait(false);
+            using var cmd = new NpgsqlCommand(CATCH_UP_EVENTS_SQL, conn);
+            using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+
+            var types = new Dictionary<string, Type>();
+
+            while (await reader.ReadAsync().ConfigureAwait(false))
             {
                 eventsProcessed++;
 
-                if (_inlineEventsNotCatchedUpYet.ContainsKey(martenEvent.Id))
+                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
+                var typeName = splittedDotnetType[0];
+                var assemblyName = splittedDotnetType[1];
+
+                if (!types.ContainsKey(typeName))
+                {
+                    var assembly = Assembly.Load(assemblyName);
+                    var type = assembly.GetType(typeName);
+                    types.Add(typeName, type);
+                }
+
+                var sequenceId = Convert.ToInt64(reader["seq_id"]);
+                var eventId = Guid.Parse(Convert.ToString(reader["id"]));
+
+                if (_inlineEventsNotCatchedUpYet.ContainsKey(eventId))
                 {
                     // Do nothing but remove the event id from the inline event dictionary to free up memory
-                    _inlineEventsNotCatchedUpYet.TryRemove(martenEvent.Id, out var _);
+                    _inlineEventsNotCatchedUpYet.TryRemove(eventId, out var _);
                 }
                 else
                 {
-                    // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projections
-                    await _projectionRepository
-                        .ApplyEventAsync(
-                            new EventEnvelope(
-                                martenEvent.StreamId,
-                                martenEvent.Id,
-                                martenEvent.Version,
-                                martenEvent.Sequence,
-                                martenEvent.Timestamp.UtcDateTime,
-                                martenEvent.Data))
-                        .ConfigureAwait(false);
+                    var eventEnvelope = new EventEnvelope (
+                        Guid.Parse(Convert.ToString(reader["stream_id"])),
+                        eventId,
+                        Convert.ToInt32(reader["version"]),
+                        sequenceId,
+                        DateTime.Parse(Convert.ToString(reader["timestamp"])).ToUniversalTime(),
+                        JsonConvert.DeserializeObject((string)reader["data"], types[typeName])
+                    );
+
+                    // Because the event id don't exist in the inline event dictionary, it must be an external event that has to be applied to projectionsd
+                    await _projectionRepository.ApplyEventAsync(eventEnvelope).ConfigureAwait(false);
                 }
             }
 
