@@ -144,27 +144,6 @@ namespace OpenFTTH.EventSourcing.Tests
         }
 
         [Fact]
-        public void CommandLogTest()
-        {
-            if (_connectionString == null)
-                return;
-
-            var eventStore = new PostgresEventStore(null, _connectionString, "TestCommandLog", true) as IEventStore;
-
-            var myCmd = new TestCommand() { CmdId = Guid.NewGuid(), Name = "Hans", Weight = 120, Gender = Gender.Male };
-            var failedResult = Result.Fail("Command failed for some reason. DOH!");
-            var myCmdLogEntry = new CommandLogEntry(myCmd.CmdId, myCmd, failedResult);
-
-            eventStore.CommandLog.Store(myCmdLogEntry);
-
-            var myCmdLogEntryFromLoad = eventStore.CommandLog.Load(myCmd.CmdId);
-
-            // Assert
-            myCmdLogEntryFromLoad.IsSuccess.Should().BeFalse();
-            myCmdLogEntryFromLoad.ErrorMessages.Should().Contain(failedResult.Errors.First().Message);
-        }
-
-        [Fact]
         public void SequenceTest()
         {
             if (_connectionString == null)

@@ -21,9 +21,6 @@ namespace OpenFTTH.EventSourcing.InMem
         private AggregateRepository _aggregateRepository;
         public IAggregateRepository Aggregates => _aggregateRepository;
 
-        private ICommandLog _commandLog;
-        public ICommandLog CommandLog => _commandLog;
-
         private ISequences _sequences;
         public ISequences Sequences => _sequences;
 
@@ -31,7 +28,6 @@ namespace OpenFTTH.EventSourcing.InMem
         {
             _aggregateRepository = new AggregateRepository(this);
             _projectionRepository = new ProjectionRepository(serviceProvider);
-            _commandLog = new InMemCommandLog();
             _sequences = new InMemSequenceStore();
         }
 
