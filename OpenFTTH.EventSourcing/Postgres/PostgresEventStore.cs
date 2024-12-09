@@ -190,9 +190,7 @@ ORDER BY seq_id asc";
 
                 if (!types.ContainsKey(typeName))
                 {
-                    var assembly = Assembly.Load(assemblyName);
-                    var type = assembly.GetType(typeName);
-                    types.Add(typeName, type);
+                    types.Add(typeName, LoadType(assemblyName, typeName));
                 }
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
@@ -242,9 +240,7 @@ ORDER BY seq_id asc";
 
                 if (!types.ContainsKey(typeName))
                 {
-                    var assembly = Assembly.Load(assemblyName);
-                    var type = assembly.GetType(typeName);
-                    types.Add(typeName, type);
+                    types.Add(typeName, LoadType(assemblyName, typeName));
                 }
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
@@ -305,9 +301,7 @@ ORDER BY seq_id asc";
 
                 if (!types.ContainsKey(typeName))
                 {
-                    var assembly = Assembly.Load(assemblyName);
-                    var type = assembly.GetType(typeName);
-                    types.Add(typeName, type);
+                    types.Add(typeName, LoadType(assemblyName, typeName));
                 }
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
@@ -378,9 +372,7 @@ ORDER BY seq_id asc";
 
                 if (!types.ContainsKey(typeName))
                 {
-                    var assembly = Assembly.Load(assemblyName);
-                    var type = assembly.GetType(typeName);
-                    types.Add(typeName, type);
+                    types.Add(typeName, LoadType(assemblyName, typeName));
                 }
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
@@ -507,6 +499,11 @@ ORDER BY seq_id asc";
         public void ScanForProjections()
         {
             _projectionRepository.ScanServiceProviderForProjections();
+        }
+
+        private static Type LoadType(string assemblyName, string typeName)
+        {
+            return Assembly.Load(assemblyName).GetType(typeName);
         }
     }
 }
