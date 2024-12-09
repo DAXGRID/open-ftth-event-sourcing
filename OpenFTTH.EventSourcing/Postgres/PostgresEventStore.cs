@@ -84,9 +84,7 @@ order by version asc";
             var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
-                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
-                var typeName = splittedDotnetType[0];
-                var assemblyName = splittedDotnetType[1];
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
 
                 if (!types.ContainsKey(typeName))
                 {
@@ -210,9 +208,7 @@ ORDER BY seq_id asc";
 
             while (reader.Read())
             {
-                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
-                var typeName = splittedDotnetType[0];
-                var assemblyName = splittedDotnetType[1];
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
 
                 if (!types.ContainsKey(typeName))
                 {
@@ -260,9 +256,7 @@ ORDER BY seq_id asc";
 
             while (await reader.ReadAsync().ConfigureAwait(false))
             {
-                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
-                var typeName = splittedDotnetType[0];
-                var assemblyName = splittedDotnetType[1];
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
 
                 if (!types.ContainsKey(typeName))
                 {
@@ -321,9 +315,7 @@ ORDER BY seq_id asc";
             {
                 eventsProcessed++;
 
-                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
-                var typeName = splittedDotnetType[0];
-                var assemblyName = splittedDotnetType[1];
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
 
                 if (!types.ContainsKey(typeName))
                 {
@@ -392,9 +384,7 @@ ORDER BY seq_id asc";
             {
                 eventsProcessed++;
 
-                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
-                var typeName = splittedDotnetType[0];
-                var assemblyName = splittedDotnetType[1];
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
 
                 if (!types.ContainsKey(typeName))
                 {
@@ -530,6 +520,12 @@ ORDER BY seq_id asc";
         private static Type LoadType(string assemblyName, string typeName)
         {
             return Assembly.Load(assemblyName).GetType(typeName);
+        }
+
+        private static (string assemblyName, string typeName) GetMartenDotNetTypeFormat(string martenDotnetType)
+        {
+            var splittedDotnetType = martenDotnetType.Split(",");
+            return (splittedDotnetType[1], splittedDotnetType[0]);
         }
     }
 }
