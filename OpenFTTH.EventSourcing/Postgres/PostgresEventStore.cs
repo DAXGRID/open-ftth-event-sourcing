@@ -66,17 +66,43 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public T Load<T>(Guid id, long? version = null) where T : AggregateBase
         {
-            IReadOnlyList<IEvent> events;
-            using (var session = _store.LightweightSession())
+            var queryStreamSql = $@"
+select *
+from {_store.Options.DatabaseSchemaName}.mt_events
+where version > @version and stream_id = '@streamId'
+order by version asc";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(queryStreamSql, conn);
+            cmd.Parameters.AddWithValue("@streamId", id);
+            cmd.Parameters.AddWithValue("@version", version ?? 0);
+
+            var types = new Dictionary<string, Type>();
+            var events = new List<object>();
+
+            conn.Open();
+            var reader = cmd.ExecuteReader();
+            while (reader.Read())
             {
-                events = session.Events.FetchStream(id, version ?? 0);
+                var splittedDotnetType = ((string)reader["mt_dotnet_type"]).Split(",");
+                var typeName = splittedDotnetType[0];
+                var assemblyName = splittedDotnetType[1];
+
+                if (!types.ContainsKey(typeName))
+                {
+                    types.Add(typeName, LoadType(assemblyName, typeName));
+                }
+
+                events.Add(JsonConvert.DeserializeObject((string)reader["data"], types[typeName]));
             }
 
             if (events != null && events.Any())
             {
                 var instance = Activator.CreateInstance(typeof(T), true);
+
                 // Replay our aggregate state from the event stream
-                events.Aggregate(instance, (o, @event) => ApplyEvent.Invoke(instance, new[] { @event.Data }));
+                events.Aggregate(instance, (o, e) => ApplyEvent.Invoke(instance, new[] { e }));
+
                 return (T)instance;
             }
 
@@ -170,7 +196,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             );
 
             var QUERY_EVENTS = $@"
-SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+SELECT data, mt_dotnet_type
 FROM events.mt_events
 WHERE mt_dotnet_type IN ({eventTypesInClause})
 ORDER BY seq_id asc";
