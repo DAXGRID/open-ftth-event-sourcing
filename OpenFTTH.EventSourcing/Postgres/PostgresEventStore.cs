@@ -63,8 +63,8 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             // This is done to force creation of the schema in case it does not exist.
             // This is needed since we no longer query using the light weight session.
-            using var session = _store.LightweightSession();
-            var _ = session.RequestCount;
+            var session = _store.OpenSession();
+            session.SaveChanges();
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
