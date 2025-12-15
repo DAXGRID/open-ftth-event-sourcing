@@ -63,8 +63,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             // This is done to force creation of the schema in case it does not exist.
             // This is needed since we no longer query using the light weight session.
-            var session = _store.OpenSession();
-            session.SaveChanges();
+            _store.Schema.ApplyAllConfiguredChangesToDatabaseAsync(Weasel.Postgresql.AutoCreate.CreateOnly);
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
