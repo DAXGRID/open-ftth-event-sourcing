@@ -1,4 +1,5 @@
-﻿using Marten;
+﻿using JasperFx.Events.Projections;
+using Marten;
 using Marten.Events;
 using Marten.Events.Projections;
 using Newtonsoft.Json;
@@ -10,6 +11,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Weasel.Core;
 
 namespace OpenFTTH.EventSourcing.Postgres
 {
@@ -49,13 +51,15 @@ namespace OpenFTTH.EventSourcing.Postgres
             options.Serializer(serializer);
 
             // Can be overridden
-            options.AutoCreateSchemaObjects = Weasel.Postgresql.AutoCreate.CreateOnly;
+            options.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOnly;
             options.DatabaseSchemaName = databaseSchemaName;
 
             _store = new DocumentStore(options);
 
             if (cleanAll)
-                _store.Advanced.Clean.CompletelyRemoveAll();
+            {
+                _store.Advanced.Clean.CompletelyRemoveAllAsync().Wait();
+            }
 
             _sequences = new PostgresSequenceStore(connectionString, databaseSchemaName);
 
@@ -63,7 +67,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             // This is done to force creation of the schema in case it does not exist.
             // This is needed since we no longer query using the light weight session.
-            _store.Schema.ApplyAllConfiguredChangesToDatabaseAsync(Weasel.Postgresql.AutoCreate.CreateOnly);
+            _store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(JasperFx.AutoCreate.CreateOnly);
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -127,7 +131,7 @@ order by version asc";
                 _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
             }
 
-            session.SaveChanges();
+            session.SaveChangesAsync().Wait();
         }
 
         public async Task AppendStreamAsync(Guid streamId, long expectedVersion, object[] events)
@@ -161,7 +165,7 @@ order by version asc";
                 }
             }
 
-            session.SaveChanges();
+            session.SaveChangesAsync().Wait();
         }
 
         public async Task AppendStreamAsync(IReadOnlyList<AggregateBase> aggregates)
@@ -187,7 +191,7 @@ order by version asc";
         public object[] FetchStream(Guid streamId, long version = 0)
         {
             using var session = _store.LightweightSession();
-            return session.Events.FetchStream(streamId, version).Select(e => e.Data).ToArray();
+            return session.Events.FetchStreamAsync(streamId, version).GetAwaiter().GetResult().Select(x => x.Data).ToArray();
         }
 
         public void DehydrateProjections()
@@ -454,7 +458,7 @@ ORDER BY seq_id asc";
                 _projectionRepository = projectionRepository;
             }
 
-            public void Apply(IDocumentOperations operations, IReadOnlyList<StreamAction> streams)
+            public void Apply(IDocumentOperations operations, IReadOnlyList<JasperFx.Events.StreamAction> streams)
             {
                 foreach (var stream in streams)
                 {
@@ -465,28 +469,23 @@ ORDER BY seq_id asc";
 
             public async Task ApplyAsync(
                 IDocumentOperations operations,
-                IReadOnlyList<StreamAction> streams,
+                IReadOnlyList<JasperFx.Events.IEvent> events,
                 CancellationToken cancellation)
             {
-                foreach (var stream in streams)
-                {
-                    var events = stream.Events
-                        .Select(
-                            e =>
-                            new EventEnvelope(
-                                stream.Id,
-                                e.Id,
-                                e.Version,
-                                e.Sequence,
-                                e.Timestamp.UtcDateTime,
-                                e.Data))
-                        .ToList()
-                        .AsReadOnly();
+                var eventEnvelopes = events.Select(e =>
+                    new EventEnvelope(
+                        e.StreamId,
+                        e.Id,
+                        e.Version,
+                        e.Sequence,
+                        e.Timestamp.UtcDateTime,
+                        e.Data))
+                    .ToList()
+                    .AsReadOnly();
 
-                    await _projectionRepository
-                        .ApplyEventsAsync(events)
-                        .ConfigureAwait(false);
-                }
+                await _projectionRepository
+                    .ApplyEventsAsync(eventEnvelopes)
+                    .ConfigureAwait(false);
             }
         }
 
