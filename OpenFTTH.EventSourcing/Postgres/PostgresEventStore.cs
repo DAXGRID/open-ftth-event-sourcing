@@ -51,7 +51,7 @@ namespace OpenFTTH.EventSourcing.Postgres
             options.Serializer(serializer);
 
             // Can be overridden
-            options.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOnly;
+            options.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOrUpdate;
             options.DatabaseSchemaName = databaseSchemaName;
 
             _store = new DocumentStore(options);
@@ -67,7 +67,7 @@ namespace OpenFTTH.EventSourcing.Postgres
 
             // This is done to force creation of the schema in case it does not exist.
             // This is needed since we no longer query using the light weight session.
-            _store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(JasperFx.AutoCreate.CreateOnly);
+            _store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(JasperFx.AutoCreate.CreateOrUpdate);
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
