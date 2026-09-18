@@ -1,27 +1,26 @@
-﻿using JasperFx.Events.Projections;
-using Marten;
-using Marten.Events;
-using Marten.Events.Projections;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Npgsql;
+using NpgsqlTypes;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Weasel.Core;
 
 namespace OpenFTTH.EventSourcing.Postgres
 {
     public sealed class PostgresEventStore : IEventStore
     {
-        private readonly IDocumentStore _store;
+        private const int _sequenceRetries = 200;
 
+        private readonly string _databaseSchema = "events";
         private long _lastSequenceNumberProcessed;
-
         private ConcurrentDictionary<Guid, bool> _inlineEventsNotCatchedUpYet = new();
+        private StringEnumConverter _stringEnumConverter = new StringEnumConverter();
 
         public long NumberOfInlineEventsNotCatchedUp => _inlineEventsNotCatchedUpYet.Count;
 
@@ -38,36 +37,12 @@ namespace OpenFTTH.EventSourcing.Postgres
 
         public PostgresEventStore(IServiceProvider serviceProvider, string connectionString, string databaseSchemaName, bool cleanAll = false)
         {
+            _connectionString = connectionString;
             _aggregateRepository = new AggregateRepository(this);
             _projectionRepository = new ProjectionRepository(serviceProvider);
-
-            var options = new StoreOptions();
-            options.Connection(connectionString);
-            options.Projections.Add(new Projection(_projectionRepository), ProjectionLifecycle.Inline);
-
-            // Serialize enums as strings
-            var serializer = new Marten.Services.JsonNetSerializer();
-            serializer.EnumStorage = Weasel.Core.EnumStorage.AsString;
-            options.Serializer(serializer);
-
-            // Can be overridden
-            options.AutoCreateSchemaObjects = JasperFx.AutoCreate.CreateOnly;
-            options.DatabaseSchemaName = databaseSchemaName;
-
-            _store = new DocumentStore(options);
-
-            if (cleanAll)
-            {
-                _store.Advanced.Clean.CompletelyRemoveAllAsync().Wait();
-            }
-
             _sequences = new PostgresSequenceStore(connectionString, databaseSchemaName);
 
-            _connectionString = connectionString;
-
-            // This is done to force creation of the schema in case it does not exist.
-            // This is needed since we no longer query using the light weight session.
-            _store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(JasperFx.AutoCreate.CreateOnly);
+            CreateEventTableIfNotExist(_databaseSchema);
         }
 
         private static readonly MethodInfo ApplyEvent = typeof(AggregateBase).GetMethod("ApplyEvent", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -76,7 +51,7 @@ namespace OpenFTTH.EventSourcing.Postgres
         {
             var queryStreamSql = $@"
 select *
-from {_store.Options.DatabaseSchemaName}.mt_events
+from {_databaseSchema}.mt_events
 where version > @version and stream_id = '@streamId'
 order by version asc";
 
@@ -117,81 +92,452 @@ order by version asc";
 
         public bool CheckIfAggregateIdHasBeenUsed(Guid id)
         {
-            return CurrentStreamVersion(id) is not null;
+            return CurrentStreamVersion(id) >= 0;
         }
 
         public void AppendStream(Guid streamId, long expectedVersion, object[] events)
         {
-            using var session = _store.LightweightSession();
-            var action = session.Events.Append(streamId, expectedVersion, events);
+            const string insertSql = @"
+INSERT INTO events.mt_events
+(seq_id, id, stream_id, version, data, type, mt_dotnet_type, timestamp)
+VALUES(@seqId, @id, @streamId, @version, @data, @type, @dotnetType, @timeStamp);";
 
-            // Add event ids to inline event dictionary used to prevent events to be applied to projections again when catchup is called to retrieve events produced by other services
-            foreach (var e in action.Events)
+            var maxRetries = _sequenceRetries;
+            var retry = 0;
+
+            var initialStreamVersion = CurrentStreamVersion(streamId);
+            var initialModifyableStreamVersion = initialStreamVersion;
+
+            while (true)
             {
-                _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
-            }
+                using var conn = new NpgsqlConnection(_connectionString);
+                conn.Open();
 
-            session.SaveChangesAsync().Wait();
+                var transaction = conn.BeginTransaction();
+
+                var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
+                var newSequenceNumber = newestSequenceNumber;
+                var eventIds = new List<Guid>(events.Count());
+                var eventEnvelopes = new List<EventEnvelope>();
+
+                foreach (var uncommitedEvent in events)
+                {
+                    var eventId = Guid.NewGuid();
+                    eventIds.Add(eventId);
+                    newSequenceNumber++;
+                    initialModifyableStreamVersion++;
+
+                    var eventType = uncommitedEvent.GetType();
+                    var eventTypeAssemblyName = eventType.Assembly.GetName().Name;
+                    var eventTypeFullName = eventType.FullName;
+                    var eventTypeNameSnakeCase = ToSnakeCase(eventTypeFullName.Split(".").Last());
+                    var dateTimeNow = DateTime.Now;
+
+                    var eventEnvelope = new EventEnvelope(
+                        streamId,
+                        eventId,
+                        initialModifyableStreamVersion,
+                        newSequenceNumber,
+                        dateTimeNow,
+                        uncommitedEvent
+                    );
+
+                    eventEnvelopes.Add(eventEnvelope);
+
+                    using var command = new NpgsqlCommand(insertSql, conn, transaction)
+                    {
+                        Parameters =
+                            {
+                                new ("@seqId", newSequenceNumber),
+                                new ("@id", eventId),
+                                new ("@streamId", streamId),
+                                new ("@version", initialModifyableStreamVersion),
+                                new NpgsqlParameter("@data", NpgsqlDbType.Jsonb)
+                                {
+                                    Value = JsonConvert.SerializeObject(uncommitedEvent, _stringEnumConverter)
+                                },
+                                new ("@type", eventTypeNameSnakeCase),
+                                new ("@dotnetType", $"{eventTypeFullName}, {eventTypeAssemblyName}"),
+                                new ("@timeStamp", dateTimeNow),
+                            }
+                    };
+
+                    command.ExecuteNonQuery();
+                }
+
+                if (newestSequenceNumber == (GetNewestSequenceNumber() ?? 0L))
+                {
+                    var newStreamVersionNumber = CurrentStreamVersion(streamId);
+                    if (newStreamVersionNumber != initialStreamVersion)
+                    {
+                        throw new ApplicationException($"Expected stream {streamId} with version {initialModifyableStreamVersion} does not match the expected version number of {expectedVersion}.");
+                    }
+
+                    transaction.Commit();
+
+                    foreach (var eId in eventIds)
+                    {
+                        _inlineEventsNotCatchedUpYet.TryAdd(eId, true);
+                    }
+
+                    foreach (var eventEnvelope in eventEnvelopes)
+                    {
+                        _projectionRepository.ApplyEvent(eventEnvelope);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    transaction.Rollback();
+
+                    if (retry == maxRetries)
+                    {
+                        throw new ApplicationException("Reached max retries for insertions");
+                    }
+
+                    retry++;
+                }
+            }
         }
 
         public async Task AppendStreamAsync(Guid streamId, long expectedVersion, object[] events)
         {
-            await using var session = _store.LightweightSession();
-            var action = session.Events.Append(streamId, expectedVersion, events);
+            const string insertSql = @"
+INSERT INTO events.mt_events
+(seq_id, id, stream_id, version, data, type, mt_dotnet_type, timestamp)
+VALUES(@seqId, @id, @streamId, @version, @data, @type, @dotnetType, @timeStamp);";
 
-            // Add event ids to inline event dictionary used to prevent events to be applied to projections again when catchup is called to retrieve events produced by other services
-            foreach (var e in action.Events)
+            var maxRetries = _sequenceRetries;
+            var retry = 0;
+
+            var initialStreamVersion = CurrentStreamVersion(streamId);
+            var versionNumber = initialStreamVersion;
+
+            while (true)
             {
-                _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
-            }
+                using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync().ConfigureAwait(false);
 
-            await session.SaveChangesAsync().ConfigureAwait(false);
+                var transaction = await conn.BeginTransactionAsync().ConfigureAwait(false);
+
+                var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
+                var newSequenceNumber = newestSequenceNumber;
+                var eventIds = new List<Guid>(events.Count());
+                var eventEnvelopes = new List<EventEnvelope>();
+
+                foreach (var uncommitedEvent in events)
+                {
+                    var eventId = Guid.NewGuid();
+                    eventIds.Add(eventId);
+                    newSequenceNumber++;
+                    versionNumber++;
+
+                    var eventType = uncommitedEvent.GetType();
+                    var eventTypeAssemblyName = eventType.Assembly.GetName().Name;
+                    var eventTypeFullName = eventType.FullName;
+                    var eventTypeNameSnakeCase = ToSnakeCase(eventTypeFullName.Split(".").Last());
+                    var dateTimeNow = DateTime.Now;
+
+                    var eventEnvelope = new EventEnvelope(
+                        streamId,
+                        eventId,
+                        versionNumber,
+                        newSequenceNumber,
+                        dateTimeNow,
+                        uncommitedEvent
+                    );
+
+                    eventEnvelopes.Add(eventEnvelope);
+
+                    using var command = new NpgsqlCommand(insertSql, conn, transaction)
+                    {
+                        Parameters =
+                            {
+                                new ("@seqId", newSequenceNumber),
+                                new ("@id", eventId),
+                                new ("@streamId", streamId),
+                                new ("@version", versionNumber),
+                                new NpgsqlParameter("@data", NpgsqlDbType.Jsonb)
+                                {
+                                    Value = JsonConvert.SerializeObject(uncommitedEvent, _stringEnumConverter)
+                                },
+                                new ("@type", eventTypeNameSnakeCase),
+                                new ("@dotnetType", $"{eventTypeFullName}, {eventTypeAssemblyName}"),
+                                new ("@timeStamp", dateTimeNow),
+                            }
+                    };
+
+                    await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+                }
+
+                if (newestSequenceNumber == (GetNewestSequenceNumber() ?? 0L))
+                {
+                    var newVersionNumber = await CurrentStreamVersionAsync(streamId).ConfigureAwait(false);
+                    if (newVersionNumber != initialStreamVersion)
+                    {
+                        throw new ApplicationException($"Expected stream version {streamId} does not match the expected version number.");
+                    }
+
+                    await transaction.CommitAsync().ConfigureAwait(false);
+
+                    foreach (var eventId in eventIds)
+                    {
+                        _inlineEventsNotCatchedUpYet.TryAdd(eventId, true);
+                    }
+
+                    foreach (var eventEnvelope in eventEnvelopes)
+                    {
+                        await _projectionRepository.ApplyEventAsync(eventEnvelope).ConfigureAwait(false);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    await transaction.RollbackAsync().ConfigureAwait(false);
+
+                    if (retry == maxRetries)
+                    {
+                        throw new ApplicationException("Reached max retries for insertions");
+                    }
+
+                    retry++;
+                }
+            }
         }
 
         public void AppendStream(IReadOnlyList<AggregateBase> aggregates)
         {
-            using var session = _store.LightweightSession();
+            const string insertSql = @"
+INSERT INTO events.mt_events
+(seq_id, id, stream_id, version, data, type, mt_dotnet_type, timestamp)
+VALUES(@seqId, @id, @streamId, @version, @data, @type, @dotnetType, @timeStamp);";
 
-            foreach (var aggregate in aggregates)
+            var maxRetries = _sequenceRetries;
+            var retry = 0;
+
+            while (true)
             {
-                var action = session.Events.Append(
-                    aggregate.Id,
-                    aggregate.Version,
-                    aggregate.GetUncommittedEvents());
+                using var conn = new NpgsqlConnection(_connectionString);
+                conn.Open();
 
-                foreach (var e in action.Events)
+                var transaction = conn.BeginTransaction();
+
+                var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
+                var newSequenceNumber = newestSequenceNumber;
+                var eventIds = new List<Guid>();
+                var eventEnvelopes = new List<EventEnvelope>();
+
+                foreach (var aggregate in aggregates)
                 {
-                    _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+                    foreach (var uncommitedEvent in aggregate.GetUncommittedEvents())
+                    {
+                        var versionNumber = CurrentStreamVersion(aggregate.Id);
+                        var eventId = Guid.NewGuid();
+                        eventIds.Add(eventId);
+                        newSequenceNumber++;
+                        versionNumber++;
+
+                        var eventType = uncommitedEvent.GetType();
+                        var eventTypeAssemblyName = eventType.Assembly.GetName().Name;
+                        var eventTypeFullName = eventType.FullName;
+                        var eventTypeNameSnakeCase = ToSnakeCase(eventTypeFullName.Split(".").Last());
+                        var dateTimeNow = DateTime.Now;
+
+                        var eventEnvelope = new EventEnvelope(
+                            aggregate.Id,
+                            eventId,
+                            versionNumber,
+                            newSequenceNumber,
+                            dateTimeNow,
+                            uncommitedEvent
+                        );
+
+                        eventEnvelopes.Add(eventEnvelope);
+
+                        using var command = new NpgsqlCommand(insertSql, conn, transaction)
+                        {
+                            Parameters =
+                            {
+                                new ("@seqId", newSequenceNumber),
+                                new ("@id", eventId),
+                                new ("@streamId", aggregate.Id),
+                                new ("@version", versionNumber),
+                                new NpgsqlParameter("@data", NpgsqlDbType.Jsonb)
+                                {
+                                    Value = JsonConvert.SerializeObject(uncommitedEvent, _stringEnumConverter)
+                                },
+                                new ("@type", eventTypeNameSnakeCase),
+                                new ("@dotnetType", $"{eventTypeFullName}, {eventTypeAssemblyName}"),
+                                new ("@timeStamp", dateTimeNow),
+                            }
+                        };
+
+                        command.ExecuteNonQuery();
+                    }
+                }
+
+                if (newestSequenceNumber == (GetNewestSequenceNumber() ?? 0L))
+                {
+                    transaction.Commit();
+                    foreach (var eId in eventIds)
+                    {
+                        _inlineEventsNotCatchedUpYet.TryAdd(eId, true);
+                    }
+
+                    foreach (var eventEnvelope in eventEnvelopes)
+                    {
+                        _projectionRepository.ApplyEvent(eventEnvelope);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    transaction.Rollback();
+
+                    if (retry == maxRetries)
+                    {
+                        throw new ApplicationException("Reached max retries for insertions");
+                    }
+
+                    retry++;
                 }
             }
-
-            session.SaveChangesAsync().Wait();
         }
 
         public async Task AppendStreamAsync(IReadOnlyList<AggregateBase> aggregates)
         {
-            await using var session = _store.LightweightSession();
+            const string insertSql = @"
+INSERT INTO events.mt_events
+(seq_id, id, stream_id, version, data, type, mt_dotnet_type, timestamp)
+VALUES(@seqId, @id, @streamId, @version, @data, @type, @dotnetType, @timeStamp);";
 
-            foreach (var aggregate in aggregates)
+            var maxRetries = _sequenceRetries;
+            var retry = 0;
+
+            while (true)
             {
-                var action = session.Events.Append(
-                    aggregate.Id,
-                    aggregate.Version,
-                    aggregate.GetUncommittedEvents());
+                using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync().ConfigureAwait(false);
 
-                foreach (var e in action.Events)
+                var transaction = await conn.BeginTransactionAsync().ConfigureAwait(false);
+                var newestSequenceNumber = GetNewestSequenceNumber() ?? 0L;
+                var newSequenceNumber = newestSequenceNumber;
+                var eventIds = new List<Guid>();
+                var eventEnvelopes = new List<EventEnvelope>();
+
+                foreach (var aggregate in aggregates)
                 {
-                    _inlineEventsNotCatchedUpYet.TryAdd(e.Id, true);
+                    foreach (var uncommitedEvent in aggregate.GetUncommittedEvents())
+                    {
+                        var versionNumber = CurrentStreamVersion(aggregate.Id);
+                        var eventId = Guid.NewGuid();
+                        eventIds.Add(eventId);
+                        newSequenceNumber++;
+                        versionNumber++;
+
+                        var eventType = uncommitedEvent.GetType();
+                        var eventTypeAssemblyName = eventType.Assembly.GetName().Name;
+                        var eventTypeFullName = eventType.FullName;
+                        var eventTypeNameSnakeCase = ToSnakeCase(eventTypeFullName.Split(".").Last());
+                        var dateTimeNow = DateTime.Now;
+
+                        var eventEnvelope = new EventEnvelope(
+                            aggregate.Id,
+                            eventId,
+                            versionNumber,
+                            newSequenceNumber,
+                            dateTimeNow,
+                            uncommitedEvent
+                        );
+
+                        eventEnvelopes.Add(eventEnvelope);
+
+                        using var command = new NpgsqlCommand(insertSql, conn, transaction)
+                        {
+                            Parameters =
+                            {
+                                new ("@seqId", newSequenceNumber),
+                                new ("@id", eventId),
+                                new ("@streamId", aggregate.Id),
+                                new ("@version", versionNumber),
+                                new NpgsqlParameter("@data", NpgsqlDbType.Jsonb)
+                                {
+                                    Value = JsonConvert.SerializeObject(uncommitedEvent, _stringEnumConverter)
+                                },
+                                new ("@type", eventTypeNameSnakeCase),
+                                new ("@dotnetType", $"{eventTypeFullName}, {eventTypeAssemblyName}"),
+                                new ("@timeStamp", dateTimeNow),
+                            }
+                        };
+
+                        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+                    }
+                }
+
+                if (newestSequenceNumber == (GetNewestSequenceNumber() ?? 0L))
+                {
+                    await transaction.CommitAsync().ConfigureAwait(false);
+                    foreach (var eId in eventIds)
+                    {
+                        _inlineEventsNotCatchedUpYet.TryAdd(eId, true);
+                    }
+
+                    foreach (var eventEnvelope in eventEnvelopes)
+                    {
+                        await _projectionRepository.ApplyEventAsync(eventEnvelope).ConfigureAwait(false);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    await transaction.RollbackAsync().ConfigureAwait(false);
+
+                    if (retry == maxRetries)
+                    {
+                        throw new ApplicationException("Reached max retries for insertions");
+                    }
+
+                    retry++;
                 }
             }
-
-            await session.SaveChangesAsync().ConfigureAwait(false);
         }
 
         public object[] FetchStream(Guid streamId, long version = 0)
         {
-            using var session = _store.LightweightSession();
-            return session.Events.FetchStreamAsync(streamId, version).GetAwaiter().GetResult().Select(x => x.Data).ToArray();
+            var QUERY_EVENTS = $@"
+SELECT seq_id, id, version, stream_id, timestamp, data, mt_dotnet_type
+FROM events.mt_events
+WHERE stream_id = @streamId AND version >= @version
+ORDER BY seq_id asc";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            conn.Open();
+            using var cmd = new NpgsqlCommand(QUERY_EVENTS, conn);
+
+            cmd.Parameters.AddWithValue("@streamId", streamId);
+            cmd.Parameters.AddWithValue("@version", version);
+            using var reader = cmd.ExecuteReader();
+
+            var types = new Dictionary<string, Type>();
+            var events = new List<object>();
+
+            while (reader.Read())
+            {
+                var (assemblyName, typeName) = GetMartenDotNetTypeFormat((string)reader["mt_dotnet_type"]);
+
+                if (!types.ContainsKey(typeName))
+                {
+                    types.Add(typeName, LoadType(assemblyName, typeName));
+                }
+
+                events.Add(JsonConvert.DeserializeObject((string)reader["data"], types[typeName]));
+            }
+
+            return events.ToArray();
         }
 
         public void DehydrateProjections()
@@ -202,7 +548,7 @@ order by version asc";
             );
 
             var QUERY_EVENTS = $@"
-SELECT data, mt_dotnet_type
+SELECT *
 FROM events.mt_events
 WHERE mt_dotnet_type IN ({eventTypesInClause})
 ORDER BY seq_id asc";
@@ -225,7 +571,7 @@ ORDER BY seq_id asc";
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
 
-                var eventEnvelope = new EventEnvelope (
+                var eventEnvelope = new EventEnvelope(
                     Guid.Parse(Convert.ToString(reader["stream_id"])),
                     Guid.Parse(Convert.ToString(reader["id"])),
                     Convert.ToInt32(reader["version"]),
@@ -273,7 +619,7 @@ ORDER BY seq_id asc";
 
                 var sequenceId = Convert.ToInt64(reader["seq_id"]);
 
-                var eventEnvelope = new EventEnvelope (
+                var eventEnvelope = new EventEnvelope(
                     Guid.Parse(Convert.ToString(reader["stream_id"])),
                     Guid.Parse(Convert.ToString(reader["id"])),
                     Convert.ToInt32(reader["version"]),
@@ -340,7 +686,7 @@ ORDER BY seq_id asc";
                 }
                 else
                 {
-                    var eventEnvelope = new EventEnvelope (
+                    var eventEnvelope = new EventEnvelope(
                         Guid.Parse(Convert.ToString(reader["stream_id"])),
                         eventId,
                         Convert.ToInt32(reader["version"]),
@@ -409,7 +755,7 @@ ORDER BY seq_id asc";
                 }
                 else
                 {
-                    var eventEnvelope = new EventEnvelope (
+                    var eventEnvelope = new EventEnvelope(
                         Guid.Parse(Convert.ToString(reader["stream_id"])),
                         eventId,
                         Convert.ToInt32(reader["version"]),
@@ -438,8 +784,7 @@ ORDER BY seq_id asc";
 
         private long? GetNewestSequenceNumber()
         {
-
-            string sql = $"SELECT MAX(seq_id) FROM {_store.Options.DatabaseSchemaName}.mt_events";
+            string sql = $"SELECT MAX(seq_id) FROM {_databaseSchema}.mt_events";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -449,75 +794,63 @@ ORDER BY seq_id asc";
             return (result is not null && result is not DBNull) ? (long)result : null;
         }
 
-        public class Projection : Marten.Events.Projections.IProjection
+        public long CurrentStreamVersion(Guid streamId)
         {
-            private ProjectionRepository _projectionRepository;
-
-            public Projection(ProjectionRepository projectionRepository)
-            {
-                _projectionRepository = projectionRepository;
-            }
-
-            public void Apply(IDocumentOperations operations, IReadOnlyList<JasperFx.Events.StreamAction> streams)
-            {
-                foreach (var stream in streams)
-                {
-                    var events = stream.Events.Select(e => new EventEnvelope(stream.Id, e.Id, e.Version, e.Sequence, e.Timestamp.UtcDateTime, e.Data)).ToList().AsReadOnly();
-                    _projectionRepository.ApplyEvents(events);
-                }
-            }
-
-            public async Task ApplyAsync(
-                IDocumentOperations operations,
-                IReadOnlyList<JasperFx.Events.IEvent> events,
-                CancellationToken cancellation)
-            {
-                var eventEnvelopes = events.Select(e =>
-                    new EventEnvelope(
-                        e.StreamId,
-                        e.Id,
-                        e.Version,
-                        e.Sequence,
-                        e.Timestamp.UtcDateTime,
-                        e.Data))
-                    .ToList()
-                    .AsReadOnly();
-
-                await _projectionRepository
-                    .ApplyEventsAsync(eventEnvelopes)
-                    .ConfigureAwait(false);
-            }
-        }
-
-        public long? CurrentStreamVersion(Guid streamId)
-        {
-            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            const string sql = "SELECT max(version) FROM events.mt_events where stream_id = @stream_id";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("id", streamId);
+            cmd.Parameters.AddWithValue("@stream_id", streamId);
 
             conn.Open();
             var result = cmd.ExecuteScalar();
 
-            return (long?)result;
+            return (result is not null && result is not DBNull) ? (long)result : -1;
         }
 
-        public async Task<long?> CurrentStreamVersionAsync(Guid streamId)
+        public async Task<long> CurrentStreamVersionAsync(Guid streamId)
         {
-            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            const string sql = "SELECT max(version) FROM events.mt_events where stream_id = @stream_id";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("id", streamId);
+            cmd.Parameters.AddWithValue("@stream_id", streamId);
 
             await conn.OpenAsync().ConfigureAwait(false);
             var result = await cmd.ExecuteScalarAsync().ConfigureAwait(false);
 
-            return (long?)result;
+            return (result is not null && result is not DBNull) ? (long)result : -1;
         }
 
         public void ScanForProjections()
         {
             _projectionRepository.ScanServiceProviderForProjections();
+        }
+
+        private void CreateEventTableIfNotExist(string schema)
+        {
+            string eventsTableSql = $@"
+CREATE SCHEMA IF NOT EXISTS events;
+CREATE TABLE IF NOT EXISTS {schema}.mt_events (
+	seq_id int8 not null,
+	id uuid not null,
+	stream_id uuid null,
+	version int8 not null,
+    data jsonb not null,
+	type varchar(500) not null,
+	timestamp timestamptz default '2023-02-12 09:23:18.899127+01'::timestamp with time zone not null,
+	tenant_id varchar default '*DEFAULT*'::character varying null,
+	mt_dotnet_type varchar null,
+	is_archived bool default false null,
+	constraint pkey_mt_events_seq_id primary key(seq_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS pk_mt_events_id_unique on events.mt_events(id);
+CREATE UNIQUE INDEX IF NOT EXISTS pk_mt_events_stream_and_version on events.mt_events(stream_id, version);";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            using var cmd = new NpgsqlCommand(eventsTableSql, conn);
+
+            conn.Open();
+            cmd.ExecuteNonQuery();
         }
 
         private static Type LoadType(string assemblyName, string typeName)
@@ -529,6 +862,37 @@ ORDER BY seq_id asc";
         {
             var splittedDotnetType = martenDotnetType.Split(",");
             return (splittedDotnetType[1], splittedDotnetType[0]);
+        }
+
+        private static string ToSnakeCase(string text)
+        {
+            if (text == null)
+            {
+                throw new ArgumentNullException(nameof(text));
+            }
+            if (text.Length < 2)
+            {
+                return text.ToLowerInvariant();
+            }
+
+            var sb = new StringBuilder();
+            sb.Append(char.ToLowerInvariant(text[0]));
+
+            for (int i = 1; i < text.Length; ++i)
+            {
+                char c = text[i];
+                if (char.IsUpper(c))
+                {
+                    sb.Append('_');
+                    sb.Append(char.ToLowerInvariant(c));
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString();
         }
     }
 }

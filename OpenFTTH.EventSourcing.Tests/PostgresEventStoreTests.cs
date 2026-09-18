@@ -6,13 +6,14 @@ using OpenFTTH.EventSourcing.Tests.Model;
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace OpenFTTH.EventSourcing.Tests
 {
     public class PostgresEventStoreTests
     {
-        private static string _connectionString = Environment.GetEnvironmentVariable("test_event_store_connection");
+        private static string _connectionString = null;
 
         [Fact]
         public void TestRawEventAppendingAndFetching()
@@ -24,6 +25,7 @@ namespace OpenFTTH.EventSourcing.Tests
 
             var streamId = Guid.NewGuid();
             var eventsToSave = new object[] { new DogBorn("Snoopy"), new DogBorn("Pluto") };
+
             eventStore.AppendStream(streamId, 0, eventsToSave);
 
             var eventsFetched = eventStore.FetchStream(streamId);
@@ -48,7 +50,6 @@ namespace OpenFTTH.EventSourcing.Tests
 
             dehydratedAggregate.Should().BeEquivalentTo(aggregateBeforeHydration);
         }
-
 
         [Fact]
         public void TestProjection()
@@ -93,7 +94,6 @@ namespace OpenFTTH.EventSourcing.Tests
             newDog.Version.Should().Be(0);
         }
 
-
         [Fact]
         public void TestDehydrateProjections()
         {
@@ -103,8 +103,7 @@ namespace OpenFTTH.EventSourcing.Tests
             // Create events store, put some events in
             var eventStore = new PostgresEventStore(null, _connectionString, "TestDehydrateProjections", true) as IEventStore;
 
-
-            Stopwatch sw = new Stopwatch();
+            var sw = new Stopwatch();
             sw.Start();
             for (int i = 0; i < 1000; i++)
             {
@@ -218,7 +217,6 @@ namespace OpenFTTH.EventSourcing.Tests
             eventStore2.CatchUp();
             poopProjection2.PoopReport.First().PoopTotal.Should().Be(400);
             ((PostgresEventStore)eventStore2).NumberOfInlineEventsNotCatchedUp.Should().Be(0);
-
         }
     }
 }
