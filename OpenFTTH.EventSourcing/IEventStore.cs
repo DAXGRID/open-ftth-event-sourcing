@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,8 +19,8 @@ namespace OpenFTTH.EventSourcing
         Task DehydrateProjectionsAsync(CancellationToken cancellationToken = default);
         long CatchUp();
         Task<long> CatchUpAsync(CancellationToken cancellationToken = default);
-        long? CurrentStreamVersion(Guid streamId);
-        Task<long?> CurrentStreamVersionAsync(Guid streamId);
+        long CurrentStreamVersion(Guid streamId);
+        Task<long> CurrentStreamVersionAsync(Guid streamId);
         void ScanForProjections();
     }
 }
