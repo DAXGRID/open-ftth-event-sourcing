@@ -491,7 +491,7 @@ ORDER BY seq_id asc";
 
         public long? CurrentStreamVersion(Guid streamId)
         {
-            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            var sql = $"SELECT MAX(version) FROM {_store.Options.DatabaseSchemaName}.mt_events where stream_id = @id";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("id", streamId);
@@ -504,7 +504,7 @@ ORDER BY seq_id asc";
 
         public async Task<long?> CurrentStreamVersionAsync(Guid streamId)
         {
-            const string sql = "SELECT version FROM events.mt_streams where id = @id";
+            var sql = $"SELECT MAX(version) FROM {_store.Options.DatabaseSchemaName}.mt_events where stream_id = @id";
             using var conn = new NpgsqlConnection(_connectionString);
             using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("id", streamId);
